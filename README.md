@@ -12,15 +12,19 @@ retrieval-quality eval gate.
 ## Install
 
 ```bash
-pip install rag-llm-infra                                   # core (numpy only)
-pip install "rag-llm-infra[faiss,qdrant,openai,serve]"      # + native backends, OpenAI, serving
-pip install -e ".[dev]"                                     # from source, for development
+# from Git (works today):
+pip install "git+https://github.com/MarwaBS/rag-llm-infra"
+pip install "rag-llm-infra[faiss,qdrant,openai,serve] @ git+https://github.com/MarwaBS/rag-llm-infra"
+# from a local clone, for development:
+pip install -e ".[dev]"
 ```
+> A tagged PyPI release is planned; until then, install from Git as above.
 
 ## Quickstart — end-to-end RAG (no API key, no network)
 
 ```bash
-pip install rag-llm-infra
+git clone https://github.com/MarwaBS/rag-llm-infra && cd rag-llm-infra
+pip install -e .
 python example.py
 ```
 
@@ -36,7 +40,7 @@ for `get_llm("openai")`.
 ## Serve it
 
 ```bash
-pip install "rag-llm-infra[serve]"
+pip install "rag-llm-infra[serve] @ git+https://github.com/MarwaBS/rag-llm-infra"
 uvicorn rag_llm_infra.serve:app          # or: docker build -t rag-llm-infra . && docker run -p 8000:8000 rag-llm-infra
 ```
 
