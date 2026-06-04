@@ -1,0 +1,10 @@
+# Development and testing dependencies — not needed at runtime.
+-r requirements.txt
+
+# Testing
+pytest>=8.0
+pytest-asyncio>=0.23
+
+# Lint + type check
+ruff>=0.6
+mypy>=1.11
