@@ -6,6 +6,8 @@ embedding index, and the observability helpers.
 from __future__ import annotations
 
 from .evidence_index import CONFIG, EmbeddingEngine, RWLock
+from .faithfulness import groundedness
+from .fallback import BudgetExhausted, FallbackLLM
 from .llm_protocol import (
     AnthropicBackend,
     LLMProtocol,
@@ -38,5 +40,7 @@ __all__ = [
     # Observability
     "configure_tracing", "get_tracer", "current_trace_context",
     "configure_logging", "llm_call",
+    # Faithfulness + fallback
+    "groundedness", "FallbackLLM", "BudgetExhausted",
     "__version__",
 ]

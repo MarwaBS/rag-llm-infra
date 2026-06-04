@@ -32,5 +32,8 @@ jobs:
       - name: Retrieval eval gate (recall@1 / MRR)
         run: python -m eval.retrieval_eval
 
+      - name: Generation eval gate (groundedness / faithfulness)
+        run: python -m eval.generation_eval
+
       - name: Run end-to-end example
         run: python example.py

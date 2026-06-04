@@ -59,15 +59,19 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 | `rag_llm_infra.tracing` | OpenTelemetry spans with console-exporter + no-op fallbacks |
 | `rag_llm_infra.log_config` | structured JSON logging + an `llm_call` latency/token timer |
 | `rag_llm_infra.serve` | FastAPI service (`/index`, `/query`, `/health`) wiring the parts together |
+| `rag_llm_infra.faithfulness` | `groundedness(answer, contexts)` — lexical faithfulness metric for RAG output |
+| `rag_llm_infra.fallback` | `FallbackLLM` — budget-aware multi-provider routing; drop-in `LLMProtocol` |
 
-## Retrieval quality gate
+## Quality gates
 
 ```bash
-python -m eval.retrieval_eval     # recall@1 / MRR on a labelled paraphrase corpus
+python -m eval.retrieval_eval      # recall@1 / MRR on a labelled paraphrase corpus
+python -m eval.generation_eval     # groundedness (faithfulness) of generated answers
 ```
 
-Fails the build if retrieval quality regresses below threshold (`recall@1 ≥ 0.80`,
-`MRR ≥ 0.85`). Wired into CI so a retrieval regression cannot merge.
+Both run in CI: a **retrieval** regression (`recall@1 ≥ 0.80`, `MRR ≥ 0.85`) or a
+**faithfulness** regression (grounded answer below threshold, or the metric failing
+to flag a hallucinated control) fails the build and cannot merge.
 
 ## Engineering principles demonstrated
 
