@@ -1,6 +1,7 @@
 # RAG + LLM Serving Infrastructure
 
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/rag-llm-infra)](https://pypi.org/project/rag-llm-infra/)
 
 An installable, vendor-neutral foundation for retrieval-augmented LLM applications:
 a swappable vector store, a cached embedding index, a provider-agnostic LLM
@@ -12,13 +13,10 @@ retrieval-quality eval gate.
 ## Install
 
 ```bash
-# from Git (works today):
-pip install "git+https://github.com/MarwaBS/rag-llm-infra"
-pip install "rag-llm-infra[faiss,qdrant,openai,serve] @ git+https://github.com/MarwaBS/rag-llm-infra"
-# from a local clone, for development:
-pip install -e ".[dev]"
+pip install rag-llm-infra                                   # core (numpy)
+pip install "rag-llm-infra[faiss,qdrant,openai,serve]"      # + native backends, OpenAI, serving
+pip install -e ".[dev]"                                     # from a local clone, for development
 ```
-> A tagged PyPI release is planned; until then, install from Git as above.
 
 ## Quickstart — end-to-end RAG (no API key, no network)
 
@@ -40,7 +38,7 @@ for `get_llm("openai")`.
 ## Serve it
 
 ```bash
-pip install "rag-llm-infra[serve] @ git+https://github.com/MarwaBS/rag-llm-infra"
+pip install "rag-llm-infra[serve]"
 uvicorn rag_llm_infra.serve:app          # or: docker build -t rag-llm-infra . && docker run -p 8000:8000 rag-llm-infra
 ```
 
