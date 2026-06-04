@@ -6,20 +6,20 @@ import pytest
 
 class TestConfig:
     def test_config_has_required_keys(self):
-        from evidence_index import CONFIG
+        from rag_llm_infra.evidence_index import CONFIG
         assert "max_embedding_cache" in CONFIG
         assert "memory_warning_threshold" in CONFIG
         assert "adaptive_cache" in CONFIG
 
     def test_config_values_are_sane(self):
-        from evidence_index import CONFIG
+        from rag_llm_infra.evidence_index import CONFIG
         assert CONFIG["max_embedding_cache"] > 0
         assert 0 < CONFIG["memory_warning_threshold"] <= 1.0
 
 
 class TestFeatureFlags:
     def test_flags_are_booleans(self):
-        from evidence_index import SENTENCE_TRANSFORMERS_AVAILABLE, PSUTIL_AVAILABLE, FAISS_AVAILABLE
+        from rag_llm_infra.evidence_index import SENTENCE_TRANSFORMERS_AVAILABLE, PSUTIL_AVAILABLE, FAISS_AVAILABLE
         assert isinstance(SENTENCE_TRANSFORMERS_AVAILABLE, bool)
         assert isinstance(PSUTIL_AVAILABLE, bool)
         assert isinstance(FAISS_AVAILABLE, bool)
@@ -27,21 +27,21 @@ class TestFeatureFlags:
 
 class TestRWLock:
     def test_read_lock_context_manager(self):
-        from evidence_index import RWLock
+        from rag_llm_infra.evidence_index import RWLock
         lock = RWLock()
         with lock.read_lock:
             assert lock._readers == 1
         assert lock._readers == 0
 
     def test_write_lock_context_manager(self):
-        from evidence_index import RWLock
+        from rag_llm_infra.evidence_index import RWLock
         lock = RWLock()
         with lock.write_lock:
             assert lock._writer is True
         assert lock._writer is False
 
     def test_concurrent_reads(self):
-        from evidence_index import RWLock
+        from rag_llm_infra.evidence_index import RWLock
         lock = RWLock()
         results = []
 
@@ -58,7 +58,7 @@ class TestRWLock:
         assert len(results) == 3
 
     def test_write_excludes_reads(self):
-        from evidence_index import RWLock
+        from rag_llm_infra.evidence_index import RWLock
         lock = RWLock()
         sequence = []
 
@@ -83,7 +83,7 @@ class TestRWLock:
         assert sequence.index("write-end") < sequence.index("read")
 
     def test_acquire_release_read(self):
-        from evidence_index import RWLock
+        from rag_llm_infra.evidence_index import RWLock
         lock = RWLock()
         lock.acquire_read()
         assert lock._readers == 1
@@ -91,7 +91,7 @@ class TestRWLock:
         assert lock._readers == 0
 
     def test_acquire_release_write(self):
-        from evidence_index import RWLock
+        from rag_llm_infra.evidence_index import RWLock
         lock = RWLock()
         lock.acquire_write()
         assert lock._writer is True
@@ -101,15 +101,15 @@ class TestRWLock:
 
 class TestEmbeddingEngine:
     def test_raises_without_sentence_transformers(self):
-        from evidence_index import SENTENCE_TRANSFORMERS_AVAILABLE
+        from rag_llm_infra.evidence_index import SENTENCE_TRANSFORMERS_AVAILABLE
         if not SENTENCE_TRANSFORMERS_AVAILABLE:
-            from evidence_index import EmbeddingEngine
+            from rag_llm_infra.evidence_index import EmbeddingEngine
             with pytest.raises(RuntimeError, match="sentence-transformers"):
                 EmbeddingEngine()
 
     def test_normalize_cache_key_empty(self):
         """Test the static logic of _normalize_cache_key without needing SentenceTransformers."""
-        from evidence_index import SENTENCE_TRANSFORMERS_AVAILABLE
+        from rag_llm_infra.evidence_index import SENTENCE_TRANSFORMERS_AVAILABLE
         if SENTENCE_TRANSFORMERS_AVAILABLE:
             pytest.skip("Test only runs when sentence-transformers is unavailable")
         # Can't instantiate EmbeddingEngine without ST, so test the logic pattern

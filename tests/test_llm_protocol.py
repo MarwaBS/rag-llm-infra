@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm_protocol import (
+from rag_llm_infra.llm_protocol import (
     AnthropicBackend,
     LLMProtocol,
     MockBackend,
@@ -153,14 +153,14 @@ class TestFactory:
         """`auto` must equal `openai` in production. Verified by patching
         OpenAIBackend to a sentinel and asserting it's constructed."""
         sentinel = MockBackend(response="sentinel")
-        with patch("llm_protocol.OpenAIBackend", return_value=sentinel) as ctor:
+        with patch("rag_llm_infra.llm_protocol.OpenAIBackend", return_value=sentinel) as ctor:
             llm = get_llm(backend="auto")
             assert ctor.called
             assert llm is sentinel
 
     def test_openai_explicit_routes_to_openai(self) -> None:
         sentinel = MockBackend(response="sentinel")
-        with patch("llm_protocol.OpenAIBackend", return_value=sentinel) as ctor:
+        with patch("rag_llm_infra.llm_protocol.OpenAIBackend", return_value=sentinel) as ctor:
             llm = get_llm(backend="openai")
             assert ctor.called
             assert llm is sentinel

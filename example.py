@@ -1,5 +1,5 @@
 """
-End-to-end retrieval-augmented generation, wired from this repo's parts.
+End-to-end retrieval-augmented generation, wired from this package's parts.
 
     embed documents → index in a VectorStore → retrieve top-k for a query
                      → build a grounded prompt → answer with an LLMProtocol backend
@@ -7,44 +7,21 @@ End-to-end retrieval-augmented generation, wired from this repo's parts.
 Runs on the NumPy vector store and the deterministic mock LLM, so it needs no
 API key, no network, and no native libraries:
 
-    pip install numpy
+    pip install rag-llm-infra
     python example.py
 
-In production, swap `embed()` for `evidence_index.EmbeddingEngine` (real
+In production, swap the demo embedder for `rag_llm_infra.EmbeddingEngine` (real
 sentence embeddings) and `get_llm("mock")` for `get_llm("openai")`.
 """
 from __future__ import annotations
 
-import hashlib
-import re
 from typing import TYPE_CHECKING, List, Optional
 
-import numpy as np
-
-from llm_protocol import get_llm
-from vector_store import get_vector_store
+from rag_llm_infra import get_llm, get_vector_store
+from rag_llm_infra._demo import embed
 
 if TYPE_CHECKING:
-    from llm_protocol import LLMProtocol
-
-_EMBED_DIM = 128
-
-
-def embed(texts: List[str]) -> np.ndarray:
-    """Deterministic bag-of-tokens hashing embedder (no model download).
-
-    Reproducible across processes (uses hashlib, not the salted built-in
-    `hash()`). Good enough to demonstrate retrieval; swap for a real sentence
-    encoder (`evidence_index.EmbeddingEngine`) in production.
-    """
-    vecs = np.zeros((len(texts), _EMBED_DIM), dtype="float32")
-    for row, text in enumerate(texts):
-        # Split on any non-alphanumeric run so "documents?" == "documents" and
-        # "retrieval-augmented" → ("retrieval", "augmented").
-        for token in re.findall(r"[a-z0-9]+", text.lower()):
-            bucket = int(hashlib.md5(token.encode()).hexdigest(), 16) % _EMBED_DIM
-            vecs[row, bucket] += 1.0
-    return vecs
+    from rag_llm_infra import LLMProtocol
 
 
 def retrieve(docs: List[str], query: str, k: int = 2) -> List[str]:

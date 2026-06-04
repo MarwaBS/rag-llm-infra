@@ -56,7 +56,7 @@ NDArrayI64: TypeAlias = npt.NDArray[np.int64]
 # Re-use the existing capability flag from evidence_index so we have one
 # source of truth for "is FAISS importable on this host".
 try:
-    from evidence_index import FAISS_AVAILABLE as _FAISS_AVAILABLE
+    from .evidence_index import FAISS_AVAILABLE as _FAISS_AVAILABLE
     FAISS_AVAILABLE: bool = _FAISS_AVAILABLE
 except Exception:  # pragma: no cover - defensive
     FAISS_AVAILABLE = False

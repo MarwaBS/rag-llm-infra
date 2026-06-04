@@ -155,7 +155,7 @@ class EmbeddingEngine:
 
     def embed_batch(self, texts: List[str], namespace: str = "default") -> "np.ndarray[Any, Any]":
         if not texts:
-            return np.array([])
+            return np.empty((0, 0), dtype="float32")
         self._check_memory_pressure()
         self._total_requests += len(texts)
         with self._lock:

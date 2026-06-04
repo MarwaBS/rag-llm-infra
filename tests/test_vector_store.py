@@ -6,7 +6,7 @@ optional backends are not installed.
 import numpy as np
 import pytest
 
-from vector_store import (
+from rag_llm_infra.vector_store import (
     FAISS_AVAILABLE,
     QDRANT_AVAILABLE,
     FAISSVectorStore,

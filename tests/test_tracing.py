@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 class TestConfigureTracing:
     def test_configure_tracing_idempotent(self):
-        import tracing
+        import rag_llm_infra.tracing as tracing
         original = tracing._CONFIGURED
         tracing._CONFIGURED = False
         try:
@@ -19,7 +19,7 @@ class TestConfigureTracing:
             tracing._CONFIGURED = original
 
     def test_configure_tracing_without_otel(self):
-        import tracing
+        import rag_llm_infra.tracing as tracing
         original = tracing._CONFIGURED
         tracing._CONFIGURED = False
         try:
@@ -41,7 +41,7 @@ class TestConfigureTracing:
             tracing._CONFIGURED = original
 
     def test_configure_tracing_with_otlp_endpoint(self):
-        import tracing
+        import rag_llm_infra.tracing as tracing
         original = tracing._CONFIGURED
         tracing._CONFIGURED = False
         try:
@@ -54,12 +54,12 @@ class TestConfigureTracing:
 
 class TestGetTracer:
     def test_returns_tracer(self):
-        from tracing import get_tracer
+        from rag_llm_infra.tracing import get_tracer
         tracer = get_tracer("test")
         assert tracer is not None
 
     def test_returns_noop_when_otel_missing(self):
-        from tracing import get_tracer, _NoOpTracer
+        from rag_llm_infra.tracing import get_tracer, _NoOpTracer
         with patch.dict(
             "sys.modules",
             {"opentelemetry": None, "opentelemetry.trace": None},
@@ -70,13 +70,13 @@ class TestGetTracer:
 
 class TestCurrentTraceContext:
     def test_returns_dict_with_keys(self):
-        from tracing import current_trace_context
+        from rag_llm_infra.tracing import current_trace_context
         ctx = current_trace_context()
         assert "trace_id" in ctx
         assert "span_id" in ctx
 
     def test_returns_empty_strings_without_otel(self):
-        from tracing import current_trace_context
+        from rag_llm_infra.tracing import current_trace_context
         with patch.dict(
             "sys.modules",
             {"opentelemetry": None, "opentelemetry.trace": None},
@@ -87,7 +87,7 @@ class TestCurrentTraceContext:
 
 class TestNoOpSpan:
     def test_context_manager(self):
-        from tracing import _NoOpSpan
+        from rag_llm_infra.tracing import _NoOpSpan
         span = _NoOpSpan()
         with span as s:
             s.set_attribute("key", "value")
@@ -95,20 +95,20 @@ class TestNoOpSpan:
             s.set_status("OK")
 
     def test_enter_returns_self(self):
-        from tracing import _NoOpSpan
+        from rag_llm_infra.tracing import _NoOpSpan
         span = _NoOpSpan()
         assert span.__enter__() is span
 
 
 class TestNoOpTracer:
     def test_start_as_current_span(self):
-        from tracing import _NoOpTracer, _NoOpSpan
+        from rag_llm_infra.tracing import _NoOpTracer, _NoOpSpan
         tracer = _NoOpTracer()
         span = tracer.start_as_current_span("test")
         assert isinstance(span, _NoOpSpan)
 
     def test_span_as_context_manager(self):
-        from tracing import _NoOpTracer
+        from rag_llm_infra.tracing import _NoOpTracer
         tracer = _NoOpTracer()
         with tracer.start_as_current_span("test") as span:
             span.set_attribute("x", 1)

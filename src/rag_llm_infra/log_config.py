@@ -29,7 +29,7 @@ from typing import Any, Generator, Optional
 # Injected at format-time so every log record carries the active trace/span IDs.
 def _get_trace_context() -> dict[str, str]:
     try:
-        from tracing import current_trace_context
+        from .tracing import current_trace_context
         return current_trace_context()
     except Exception:
         return {"trace_id": "", "span_id": ""}
