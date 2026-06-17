@@ -2,13 +2,53 @@ name: Release to PyPI
 
 # Tag a release to publish:  git tag v0.1.0 && git push origin v0.1.0
 # Requires a repository secret `PYPI_API_TOKEN` (a PyPI API token).
+#
+# Publishing is GATED: the same lint / format / type / test / eval suite that
+# guards `main` must pass first, so a tag can never ship code that would fail CI.
+# The tag must also match the package version, and the upload is idempotent
+# (`--skip-existing`) so a re-pushed tag does not hard-fail on an already-present
+# release.
 
 on:
   push:
     tags: ["v*"]
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (editable, dev extras incl. FAISS + Qdrant + serve)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(python -c 'import rag_llm_infra; print(rag_llm_infra.__version__)')"
+          echo "tag=$tag package=$pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match package version $pkg"
+            exit 1
+          fi
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format check (ruff)
+        run: ruff format --check .
+      - name: Type-check (mypy)
+        run: mypy src
+      - name: Tests
+        run: pytest -q
+      - name: Retrieval eval gate (recall@1 / MRR)
+        run: python -m eval.retrieval_eval
+      - name: Generation eval gate (groundedness / faithfulness)
+        run: python -m eval.generation_eval
+
   publish:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,4 +65,4 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           pip install twine
-          twine upload --non-interactive dist/*
+          twine upload --non-interactive --skip-existing dist/*

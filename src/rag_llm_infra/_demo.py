@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import List
 
 import numpy as np
 
 EMBED_DIM = 128
 
 
-def embed(texts: List[str]) -> np.ndarray:
+def embed(texts: list[str]) -> np.ndarray:
     """Embed `texts` into an `(N, EMBED_DIM)` float32 matrix."""
     vecs = np.zeros((len(texts), EMBED_DIM), dtype="float32")
     for row, text in enumerate(texts):

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rag-llm-infra"
-version = "0.1.1"
+version = "0.1.2"
 description = "Vendor-neutral RAG + LLM serving infrastructure: swappable LLM protocol and vector store (FAISS/NumPy/Qdrant), cached embedding index, and observability."
 readme = "README.md"
 # 3.12 to match the single tested/configured version (CI matrix, ruff
@@ -47,7 +47,9 @@ src = ["src"]
 exclude = [".git", ".venv", "__pycache__"]
 
 [tool.ruff.lint]
-select = ["F", "E"]
+# F/E (pyflakes/pycodestyle) + I (import sort), B (bugbear: real-bug lints),
+# UP (pyupgrade: keep syntax current to the py312 floor).
+select = ["F", "E", "I", "B", "UP"]
 ignore = ["E402", "E501", "E701", "E741"]
 
 [tool.ruff.lint.per-file-ignores]

@@ -1,7 +1,8 @@
 """Tests for tracing.py — OpenTelemetry distributed tracing."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestConfigureTracing:
@@ -66,7 +67,7 @@ class TestGetTracer:
         assert tracer is not None
 
     def test_returns_noop_when_otel_missing(self):
-        from rag_llm_infra.tracing import get_tracer, _NoOpTracer
+        from rag_llm_infra.tracing import _NoOpTracer, get_tracer
 
         with patch.dict(
             "sys.modules",
@@ -114,7 +115,7 @@ class TestNoOpSpan:
 
 class TestNoOpTracer:
     def test_start_as_current_span(self):
-        from rag_llm_infra.tracing import _NoOpTracer, _NoOpSpan
+        from rag_llm_infra.tracing import _NoOpSpan, _NoOpTracer
 
         tracer = _NoOpTracer()
         span = tracer.start_as_current_span("test")

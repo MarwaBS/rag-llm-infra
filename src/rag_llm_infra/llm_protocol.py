@@ -17,7 +17,7 @@ Selection is via `get_llm(backend)` reading an `auto | openai | anthropic
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 __all__ = [
     "LLMProtocol",
@@ -50,11 +50,11 @@ class LLMProtocol(Protocol):
     backend_name: str
     backend_version: str
 
-    def invoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         """Synchronous chat completion. Returns the assistant text."""
         ...
 
-    async def ainvoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         """Async chat completion. Returns the assistant text."""
         ...
 
@@ -71,7 +71,7 @@ class OpenAIBackend:
 
     backend_name = "openai"
 
-    def __init__(self, model: str = "gpt-4o", api_key: Optional[str] = None) -> None:
+    def __init__(self, model: str = "gpt-4o", api_key: str | None = None) -> None:
         try:
             import openai  # imported lazily so `import llm_protocol` works without the SDK
         except ImportError as exc:
@@ -88,8 +88,8 @@ class OpenAIBackend:
         self._openai = openai
         self._api_key = api_key
         self._model = model
-        self._client: Optional[Any] = None
-        self._aclient: Optional[Any] = None
+        self._client: Any | None = None
+        self._aclient: Any | None = None
         self.backend_version = openai.__version__
 
     @property
@@ -104,7 +104,7 @@ class OpenAIBackend:
             self._aclient = self._openai.AsyncOpenAI(api_key=self._api_key)
         return self._aclient
 
-    def invoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         # openai's SDK uses a typed-dict union for ChatCompletionMessageParam;
         # at runtime it accepts any dict shape with 'role' + 'content'. Our
         # Protocol surface is intentionally the simpler shape, so we cast.
@@ -115,7 +115,7 @@ class OpenAIBackend:
         )
         return cast(str, resp.choices[0].message.content or "")
 
-    async def ainvoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         resp = await self.aclient.chat.completions.create(
             model=self._model,
             messages=cast(Any, messages),
@@ -160,19 +160,19 @@ class AnthropicBackend:
     def __init__(
         self,
         model: str = "claude-sonnet-4-6",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key
 
-    def invoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         raise NotImplementedError(
             "AnthropicBackend is a contract stub. Implement per the docstring "
             "in llm_protocol.py before use. See "
             "docs/decisions/006-llm-protocol-abstraction.md for the full plan."
         )
 
-    async def ainvoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         raise NotImplementedError(
             "AnthropicBackend is a contract stub. Implement per the docstring "
             "in llm_protocol.py before use. See "
@@ -197,15 +197,15 @@ class MockBackend:
     def __init__(self, response: Any = "MOCK_RESPONSE") -> None:
         self._response = response
 
-    def _resolve(self, messages: List[Dict[str, str]]) -> str:
+    def _resolve(self, messages: list[dict[str, str]]) -> str:
         if callable(self._response):
             return str(self._response(messages))
         return str(self._response)
 
-    def invoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         return self._resolve(messages)
 
-    async def ainvoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         return self._resolve(messages)
 
 

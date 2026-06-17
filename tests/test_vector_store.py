@@ -128,3 +128,40 @@ class TestContractAcrossBackends:
         before = q.copy()
         store.search(q, k=1)
         assert np.array_equal(q, before), f"{name} mutated the query array in search()"
+
+    def test_empty_store_returns_zero_width(self, name, cls) -> None:
+        # Regression: an empty store (built from a 0-row add) used to diverge —
+        # FAISS raised a bare AssertionError, Qdrant a misleading "called before
+        # add()". The documented contract is row width min(k, size) == 0, which
+        # NumPy already honoured; now all three return (Nq, 0) uniformly.
+        store = cls()
+        store.add(np.zeros((0, 3), dtype="float32"))
+        assert store.size == 0
+        scores, idx = store.search(np.eye(2, 3, dtype="float32"), k=5)
+        assert scores.shape == (2, 0), f"{name}: scores {scores.shape}, want (2, 0)"
+        assert idx.shape == (2, 0), f"{name}: idx {idx.shape}, want (2, 0)"
+
+    def test_search_before_add_raises_runtimeerror(self, name, cls) -> None:
+        # Distinct from the empty-store case above: never calling add() is a
+        # programming error and must raise RuntimeError on every backend.
+        with pytest.raises(RuntimeError):
+            cls().search(np.eye(1, 3, dtype="float32"), k=1)
+
+    def test_one_dim_add_raises_valueerror(self, name, cls) -> None:
+        # A 1-D add used to surface as an opaque AxisError deep in the backend.
+        with pytest.raises(ValueError, match="2-D"):
+            cls().add(np.ones(3, dtype="float32"))
+
+    def test_non_finite_embedding_raises_valueerror(self, name, cls) -> None:
+        # NaN/inf embeddings silently produced garbage scores before validation.
+        store = cls()
+        bad = np.ones((3, 3), dtype="float32")
+        bad[1, 0] = np.nan
+        with pytest.raises(ValueError, match="non-finite"):
+            store.add(bad)
+
+    def test_query_dim_mismatch_raises_valueerror(self, name, cls) -> None:
+        store = cls()
+        store.add(_orthonormal_corpus())  # dim 3
+        with pytest.raises(ValueError, match="dim"):
+            store.search(np.ones((1, 5), dtype="float32"), k=1)

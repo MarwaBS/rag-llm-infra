@@ -6,15 +6,16 @@ an RWLock for concurrent read/write access, and EmbeddingEngine for sentence-lev
 embeddings with adaptive, memory-pressure-aware caching.
 """
 
-import os
-import re
 import hashlib
 import logging
+import os
+import re
 import threading
 import time
 import unicodedata
 from collections import OrderedDict
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 import numpy as np
 
 # FAISS import for cache compatibility checks
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 # ===============================
 # CONFIGURATION
 # ===============================
-CONFIG: Dict[str, Any] = {
+CONFIG: dict[str, Any] = {
     "max_embedding_cache": int(os.getenv("EVIDENCE_MAX_CACHE", "2000")),
     "memory_warning_threshold": float(os.getenv("EVIDENCE_MEMORY_WARN", "0.8")),
     "adaptive_cache": os.getenv("EVIDENCE_ADAPTIVE_CACHE", "true").lower() == "true",
@@ -158,8 +159,8 @@ class EmbeddingEngine:
         self,
         model_name: str = "all-MiniLM-L6-v2",
         *,
-        model: Optional[Any] = None,
-        revision: Optional[str] = None,
+        model: Any | None = None,
+        revision: str | None = None,
     ) -> None:
         """
         model: inject a pre-built embedder (anything with
@@ -224,13 +225,13 @@ class EmbeddingEngine:
             pass
 
     def embed_batch(
-        self, texts: List[str], namespace: str = "default"
+        self, texts: list[str], namespace: str = "default"
     ) -> "np.ndarray[Any, Any]":
         if not texts:
             return np.empty((0, 0), dtype="float32")
         self._check_memory_pressure()
         keys = [self._normalize_cache_key(t, namespace) for t in texts]
-        results: List[Any] = [None] * len(texts)
+        results: list[Any] = [None] * len(texts)
 
         # Read phase — concurrent readers share the cache.
         with self._lock.read_lock:
@@ -248,20 +249,31 @@ class EmbeddingEngine:
         # must not block concurrent cache hits.
         miss_indices = [i for i, r in enumerate(results) if r is None]
         if miss_indices:
+            # Dedup identical misses within this batch by cache key, so a text
+            # repeated in `texts` is encoded ONCE rather than once per occurrence
+            # (same key == same cached vector, so re-encoding it was pure waste).
+            unique_keys: list[str] = []
+            first_index_for_key: dict[str, int] = {}
+            for i in miss_indices:
+                if keys[i] not in first_index_for_key:
+                    first_index_for_key[keys[i]] = i
+                    unique_keys.append(keys[i])
             computed = self.model.encode(
-                [texts[i] for i in miss_indices],
+                [texts[first_index_for_key[k]] for k in unique_keys],
                 convert_to_numpy=True,
                 show_progress_bar=False,
             )
+            emb_for_key = dict(zip(unique_keys, computed, strict=True))
             with self._lock.write_lock:
-                for i, emb in zip(miss_indices, computed):
-                    self._cache[keys[i]] = emb
-                    results[i] = emb
+                for k in unique_keys:
+                    self._cache[k] = emb_for_key[k]
+                for i in miss_indices:
+                    results[i] = emb_for_key[keys[i]]
                 while len(self._cache) > self._max_cache_size:
                     self._cache.popitem(last=False)
         return np.stack(results)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Returns cache statistics for monitoring."""
         with self._stats_lock:
             total_requests = self._total_requests

@@ -17,18 +17,27 @@ Conforms to `LLMProtocol`, so it is a drop-in anywhere a single backend is used:
 
     from rag_llm_infra import get_llm, FallbackLLM
     llm = FallbackLLM([get_llm("openai"), get_llm("mock")])
+
+Thread safety: a single `FallbackLLM` is safe to share across threads. The only
+mutable state is `_active` (the budget-exhaustion high-water mark), which advances
+*monotonically* — concurrent calls can never move it backward, and the underlying
+backends do the real work outside any lock, so there is no added contention. The
+benign cost of being lock-free is that two threads racing on the same just-exhausted
+backend may each discover the `BudgetExhausted` once before `_active` settles; the
+chain still trips forward correctly.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type
+from collections.abc import Sequence
+from typing import Any
 
 from .llm_protocol import LLMProtocol
 
 # Errors that signal a bug or contract violation, not a recoverable provider
 # failure. These always propagate, even if `retry_on` would otherwise match them,
 # so fallback never masks a programming error.
-_NON_RETRYABLE: Tuple[Type[BaseException], ...] = (
+_NON_RETRYABLE: tuple[type[BaseException], ...] = (
     TypeError,
     KeyError,
     IndexError,
@@ -52,9 +61,9 @@ class FallbackLLM:
         self,
         backends: Sequence[LLMProtocol],
         *,
-        retry_on: Tuple[Type[BaseException], ...] = (Exception,),
+        retry_on: tuple[type[BaseException], ...] = (Exception,),
     ) -> None:
-        self._backends: List[LLMProtocol] = list(backends)
+        self._backends: list[LLMProtocol] = list(backends)
         if not self._backends:
             raise ValueError("FallbackLLM requires at least one backend")
         self._retry_on = retry_on
@@ -66,14 +75,16 @@ class FallbackLLM:
         """Index of the first backend still eligible (advances past exhausted ones)."""
         return self._active
 
-    def invoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
-        last: Optional[BaseException] = None
+    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        last: BaseException | None = None
         for i in range(self._active, len(self._backends)):
             try:
                 return self._backends[i].invoke(messages, **kwargs)
             except BudgetExhausted as exc:
                 last = exc
-                self._active = i + 1  # permanent: never retry an exhausted backend
+                # Permanent: never retry an exhausted backend. `max` keeps the
+                # advance monotonic so a slower concurrent call can't regress it.
+                self._active = max(self._active, i + 1)
             except _NON_RETRYABLE:
                 raise  # a bug, not a provider failure — surface it, don't fall through
             except self._retry_on as exc:
@@ -82,14 +93,14 @@ class FallbackLLM:
             f"FallbackLLM: all {len(self._backends)} backends failed"
         ) from last
 
-    async def ainvoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
-        last: Optional[BaseException] = None
+    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        last: BaseException | None = None
         for i in range(self._active, len(self._backends)):
             try:
                 return await self._backends[i].ainvoke(messages, **kwargs)
             except BudgetExhausted as exc:
                 last = exc
-                self._active = i + 1
+                self._active = max(self._active, i + 1)
             except _NON_RETRYABLE:
                 raise
             except self._retry_on as exc:

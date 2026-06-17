@@ -20,12 +20,11 @@ collapses.
 from __future__ import annotations
 
 import sys
-from typing import Dict, List
 
 from rag_llm_infra import get_vector_store, groundedness
 from rag_llm_infra._demo import embed
 
-DOCS: List[str] = [
+DOCS: list[str] = [
     "FAISS performs in-process vector similarity search with inner product.",
     "Qdrant is a vector database exposing REST and gRPC search APIs.",
     "Retrieval-augmented generation grounds language model output in retrieved documents.",
@@ -50,14 +49,14 @@ HALLUCINATED_MAX = 0.34  # a hallucination must be clearly flagged as unsupporte
 MARGIN_MIN = 0.50  # and the two must be well-separated
 
 
-def _retrieve(query: str, k: int = 2) -> List[str]:
+def _retrieve(query: str, k: int = 2) -> list[str]:
     store = get_vector_store("numpy")
     store.add(embed(DOCS))
     _, idx = store.search(embed([query]), k=k)
     return [DOCS[int(i)] for i in idx[0] if i >= 0]
 
 
-def evaluate() -> Dict[str, float]:
+def evaluate() -> dict[str, float]:
     contexts = _retrieve(QUERY)
     grounded = groundedness(FAITHFUL_ANSWER, contexts)
     hallucinated = groundedness(HALLUCINATED_ANSWER, contexts)
@@ -74,7 +73,7 @@ def main() -> int:
         f"generation eval — grounded={m['grounded']:.3f}  "
         f"hallucinated={m['hallucinated']:.3f}  margin={m['margin']:.3f}"
     )
-    reasons: List[str] = []
+    reasons: list[str] = []
     if m["grounded"] < GROUNDED_MIN:
         reasons.append(f"grounded {m['grounded']:.3f} < {GROUNDED_MIN}")
     if m["hallucinated"] > HALLUCINATED_MAX:

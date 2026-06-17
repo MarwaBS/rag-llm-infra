@@ -22,7 +22,6 @@ set and the real embedder.
 from __future__ import annotations
 
 import sys
-from typing import Dict, List, Tuple
 
 from rag_llm_infra import get_vector_store
 from rag_llm_infra._demo import embed
@@ -30,7 +29,7 @@ from rag_llm_infra._demo import embed
 # Each query reorders/varies a document's tokens; the int is the index of its
 # single relevant document. (Order-insensitive demo embedder → this is token-set
 # overlap, not semantics — see the module docstring.)
-DOCS: List[str] = [
+DOCS: list[str] = [
     "FAISS performs in-process vector similarity search with brute-force inner product.",
     "Qdrant is a vector database exposing REST and gRPC search APIs.",
     "OpenTelemetry standardizes distributed tracing across services.",
@@ -38,7 +37,7 @@ DOCS: List[str] = [
     "Redis provides an in-memory key-value store with atomic counters and TTL.",
     "Prometheus scrapes time-series metrics from instrumented services.",
 ]
-QUERIES: List[Tuple[str, int]] = [
+QUERIES: list[tuple[str, int]] = [
     ("brute force inner product vector similarity search in process", 0),
     ("vector database exposing grpc and rest search apis", 1),
     ("standardized distributed tracing across services", 2),
@@ -46,10 +45,10 @@ QUERIES: List[Tuple[str, int]] = [
     ("in memory key value store with ttl and atomic counters", 4),
     ("scraping time series metrics from instrumented services", 5),
 ]
-THRESHOLDS: Dict[str, float] = {"recall@1": 0.80, "mrr": 0.85}
+THRESHOLDS: dict[str, float] = {"recall@1": 0.80, "mrr": 0.85}
 
 
-def evaluate(k: int = 3) -> Dict[str, float]:
+def evaluate(k: int = 3) -> dict[str, float]:
     """Return {recall@1, mrr} for the fixture corpus over the NumPy backend."""
     store = get_vector_store("numpy")
     store.add(embed(DOCS))
