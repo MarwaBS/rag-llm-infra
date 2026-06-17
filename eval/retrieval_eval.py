@@ -1,13 +1,24 @@
-"""Retrieval-quality eval: recall@1 and MRR on a labelled fixture corpus.
+"""Retrieval-mechanics smoke gate: recall@1 and MRR over the demo embedder.
 
 Run as a CI gate:
 
     python -m eval.retrieval_eval
 
 Exits non-zero if recall@1 or MRR fall below the configured thresholds, so a
-retrieval regression fails the build. The corpus uses *paraphrased* queries
-(not verbatim documents), so this measures retrieval quality, not identity lookup.
+regression in the vector-store search path (ranking, indexing, the
+NumPy backend) fails the build.
+
+SCOPE — read this. This eval runs the deterministic bag-of-tokens demo embedder
+(`rag_llm_infra._demo.embed`) over the NumPy backend. Because that embedder is
+order-insensitive, the "paraphrased" queries below (which reorder the document's
+tokens) are effectively token-set overlap, NOT semantics. So this gate measures
+the *retrieval mechanics* — does the store rank the right document top-1 — not
+semantic retrieval quality. Semantic quality depends on the real
+`EmbeddingEngine` (sentence-transformers), which needs a model download and is
+out of scope for a hermetic CI gate; evaluate that separately with a labelled
+set and the real embedder.
 """
+
 from __future__ import annotations
 
 import sys
@@ -16,7 +27,9 @@ from typing import Dict, List, Tuple
 from rag_llm_infra import get_vector_store
 from rag_llm_infra._demo import embed
 
-# Each query is a paraphrase; the int is the index of its single relevant document.
+# Each query reorders/varies a document's tokens; the int is the index of its
+# single relevant document. (Order-insensitive demo embedder → this is token-set
+# overlap, not semantics — see the module docstring.)
 DOCS: List[str] = [
     "FAISS performs in-process vector similarity search with brute-force inner product.",
     "Qdrant is a vector database exposing REST and gRPC search APIs.",
@@ -57,7 +70,9 @@ def evaluate(k: int = 3) -> Dict[str, float]:
 
 def main() -> int:
     m = evaluate()
-    print(f"retrieval eval — recall@1={m['recall@1']:.3f}  MRR={m['mrr']:.3f}  (n={len(QUERIES)})")
+    print(
+        f"retrieval eval — recall@1={m['recall@1']:.3f}  MRR={m['mrr']:.3f}  (n={len(QUERIES)})"
+    )
     failures = {k: round(m[k], 3) for k, t in THRESHOLDS.items() if m[k] < t}
     if failures:
         print(f"FAIL: {failures} below thresholds {THRESHOLDS}")

@@ -8,6 +8,7 @@ It is a *lexical* proxy: it catches answers that introduce vocabulary absent fro
 the evidence (a common hallucination signature). It does not judge semantics —
 pair it with an LLM-judge for nuanced faithfulness.
 """
+
 from __future__ import annotations
 
 import re
@@ -16,16 +17,56 @@ from typing import Sequence, Set
 # Closed-class stop words carry no groundable claim; content words do.
 _STOP: frozenset = frozenset(
     {
-        "the", "a", "an", "and", "or", "of", "in", "to", "is", "are", "was", "were",
-        "be", "been", "it", "its", "this", "that", "these", "those", "with", "for",
-        "on", "by", "as", "from", "at", "into", "over", "than", "then", "so", "such",
-        "but", "not", "no", "can", "will", "they", "their",
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "of",
+        "in",
+        "to",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "with",
+        "for",
+        "on",
+        "by",
+        "as",
+        "from",
+        "at",
+        "into",
+        "over",
+        "than",
+        "then",
+        "so",
+        "such",
+        "but",
+        "not",
+        "no",
+        "can",
+        "will",
+        "they",
+        "their",
     }
 )
 
 
 def _content_tokens(text: str) -> Set[str]:
-    return {t for t in re.findall(r"[a-z0-9]+", text.lower()) if t not in _STOP and len(t) > 2}
+    return {
+        t
+        for t in re.findall(r"[a-z0-9]+", text.lower())
+        if t not in _STOP and len(t) > 2
+    }
 
 
 def groundedness(answer: str, contexts: Sequence[str]) -> float:

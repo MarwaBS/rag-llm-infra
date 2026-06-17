@@ -23,6 +23,12 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
+      - name: Format check (ruff)
+        run: ruff format --check .
+
+      - name: Type-check (mypy)
+        run: mypy src
+
       - name: Build wheel + sdist
         run: python -m build
 

@@ -11,7 +11,8 @@ These tests are hermetic.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -45,7 +46,9 @@ class TestMockBackend:
             return f"seen:{len(messages)}"
 
         llm = MockBackend(response=echo)
-        result = llm.invoke([{"role": "user", "content": "a"}, {"role": "user", "content": "b"}])
+        result = llm.invoke(
+            [{"role": "user", "content": "a"}, {"role": "user", "content": "b"}]
+        )
         assert result == "seen:2"
         assert len(captured) == 1
         assert captured[0][0]["content"] == "a"
@@ -104,6 +107,15 @@ class TestAnthropicBackend:
         llm = AnthropicBackend()
         assert llm._model == "claude-sonnet-4-6"
 
+    def test_referenced_adr_actually_exists(self) -> None:
+        """The stub's error and module docstring point at ADR-006; that file
+        must exist in the repo (it previously did not)."""
+        import rag_llm_infra
+
+        repo_root = Path(rag_llm_infra.__file__).resolve().parents[2]
+        adr = repo_root / "docs" / "decisions" / "006-llm-protocol-abstraction.md"
+        assert adr.exists(), f"referenced ADR missing: {adr}"
+
 
 # ---------------------------------------------------------------------------
 # OpenAIBackend — import-time tests only (no network), via a patched SDK.
@@ -133,6 +145,57 @@ class TestOpenAIBackend:
             with pytest.raises(RuntimeError, match="openai"):
                 OpenAIBackend()
 
+    @staticmethod
+    def _fake_completion(text: str):
+        resp = MagicMock()
+        resp.choices = [MagicMock()]
+        resp.choices[0].message.content = text
+        return resp
+
+    def test_invoke_extracts_assistant_text(self) -> None:
+        """invoke() must call the SDK and return choices[0].message.content —
+        previously this body had zero coverage, even against a mock."""
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend(model="gpt-4o-mini")
+            llm._client = MagicMock()
+            llm._client.chat.completions.create.return_value = self._fake_completion(
+                "hi from openai"
+            )
+            out = llm.invoke([{"role": "user", "content": "hello"}], temperature=0.0)
+            assert out == "hi from openai"
+            _, kwargs = llm._client.chat.completions.create.call_args
+            assert kwargs["model"] == "gpt-4o-mini"
+            assert kwargs["temperature"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_ainvoke_extracts_assistant_text(self) -> None:
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            llm._aclient = MagicMock()
+            llm._aclient.chat.completions.create = AsyncMock(
+                return_value=self._fake_completion("async hi")
+            )
+            assert (
+                await llm.ainvoke([{"role": "user", "content": "hello"}]) == "async hi"
+            )
+
+    def test_clients_constructed_lazily(self) -> None:
+        """Neither SDK client is built until first use; a sync call must not
+        spin up the async client (the old eager __init__ built both)."""
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            assert llm._client is None and llm._aclient is None
+            llm.client.chat.completions.create.return_value = self._fake_completion("x")
+            llm.invoke([{"role": "user", "content": "hi"}])
+            assert llm._client is not None
+            assert llm._aclient is None  # async client never touched
+
 
 # ---------------------------------------------------------------------------
 # Factory — get_llm routing is the only place call sites touch, so every
@@ -153,14 +216,18 @@ class TestFactory:
         """`auto` must equal `openai` in production. Verified by patching
         OpenAIBackend to a sentinel and asserting it's constructed."""
         sentinel = MockBackend(response="sentinel")
-        with patch("rag_llm_infra.llm_protocol.OpenAIBackend", return_value=sentinel) as ctor:
+        with patch(
+            "rag_llm_infra.llm_protocol.OpenAIBackend", return_value=sentinel
+        ) as ctor:
             llm = get_llm(backend="auto")
             assert ctor.called
             assert llm is sentinel
 
     def test_openai_explicit_routes_to_openai(self) -> None:
         sentinel = MockBackend(response="sentinel")
-        with patch("rag_llm_infra.llm_protocol.OpenAIBackend", return_value=sentinel) as ctor:
+        with patch(
+            "rag_llm_infra.llm_protocol.OpenAIBackend", return_value=sentinel
+        ) as ctor:
             llm = get_llm(backend="openai")
             assert ctor.called
             assert llm is sentinel

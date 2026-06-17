@@ -1,4 +1,5 @@
 """Tests for log_config.py — structured logging and llm_call context manager."""
+
 import json
 import logging
 import pytest
@@ -8,10 +9,16 @@ from unittest.mock import patch
 class TestJsonFormatter:
     def test_format_produces_valid_json(self):
         from rag_llm_infra.log_config import _JsonFormatter
+
         fmt = _JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="test.py",
-            lineno=1, msg="hello %s", args=("world",), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="hello %s",
+            args=("world",),
+            exc_info=None,
         )
         output = fmt.format(record)
         data = json.loads(output)
@@ -22,15 +29,22 @@ class TestJsonFormatter:
 
     def test_format_includes_exception(self):
         from rag_llm_infra.log_config import _JsonFormatter
+
         fmt = _JsonFormatter()
         try:
             raise ValueError("test error")
         except ValueError:
             import sys
+
             exc_info = sys.exc_info()
         record = logging.LogRecord(
-            name="test", level=logging.ERROR, pathname="test.py",
-            lineno=1, msg="fail", args=(), exc_info=exc_info,
+            name="test",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="fail",
+            args=(),
+            exc_info=exc_info,
         )
         output = fmt.format(record)
         data = json.loads(output)
@@ -39,10 +53,16 @@ class TestJsonFormatter:
 
     def test_format_includes_extra_fields(self):
         from rag_llm_infra.log_config import _JsonFormatter
+
         fmt = _JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="test.py",
-            lineno=1, msg="test", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="test",
+            args=(),
+            exc_info=None,
         )
         record.custom_field = "custom_value"
         output = fmt.format(record)
@@ -51,10 +71,16 @@ class TestJsonFormatter:
 
     def test_format_includes_trace_context(self):
         from rag_llm_infra.log_config import _JsonFormatter
+
         fmt = _JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="test.py",
-            lineno=1, msg="test", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="test",
+            args=(),
+            exc_info=None,
         )
         output = fmt.format(record)
         data = json.loads(output)
@@ -65,6 +91,7 @@ class TestJsonFormatter:
 class TestConfigureLogging:
     def test_configure_logging_runs_once(self):
         import rag_llm_infra.log_config as log_config
+
         original = log_config._CONFIGURED
         log_config._CONFIGURED = False
         try:
@@ -79,6 +106,7 @@ class TestConfigureLogging:
 
     def test_configure_logging_prod_mode(self):
         import rag_llm_infra.log_config as log_config
+
         original_configured = log_config._CONFIGURED
         original_env = log_config.ENV
         log_config._CONFIGURED = False
@@ -99,6 +127,7 @@ class TestConfigureLogging:
 
     def test_configure_logging_dev_mode(self):
         import rag_llm_infra.log_config as log_config
+
         original_configured = log_config._CONFIGURED
         original_env = log_config.ENV
         log_config._CONFIGURED = False
@@ -120,6 +149,7 @@ class TestConfigureLogging:
 class TestLlmCall:
     def test_successful_call(self):
         from rag_llm_infra.log_config import llm_call
+
         with llm_call("test_op", model="gpt-4o") as ctx:
             ctx["tokens"] = 100
         assert ctx["status"] == "ok"
@@ -129,6 +159,7 @@ class TestLlmCall:
 
     def test_failed_call(self):
         from rag_llm_infra.log_config import llm_call
+
         with pytest.raises(ValueError):
             with llm_call("test_op") as ctx:
                 raise ValueError("boom")
@@ -138,12 +169,14 @@ class TestLlmCall:
 
     def test_default_model(self):
         from rag_llm_infra.log_config import llm_call
+
         with llm_call("test_op") as ctx:
             pass
         assert ctx["model"] is not None
 
     def test_custom_logger(self):
         from rag_llm_infra.log_config import llm_call
+
         custom_logger = logging.getLogger("custom_test")
         with llm_call("test_op", logger=custom_logger) as ctx:
             pass

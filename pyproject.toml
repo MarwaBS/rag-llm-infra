@@ -7,7 +7,10 @@ name = "rag-llm-infra"
 version = "0.1.0"
 description = "Vendor-neutral RAG + LLM serving infrastructure: swappable LLM protocol and vector store (FAISS/NumPy/Qdrant), cached embedding index, and observability."
 readme = "README.md"
-requires-python = ">=3.10"
+# 3.12 to match the single tested/configured version (CI matrix, ruff
+# target-version, mypy python_version, and the 3.12 classifier). The project was
+# not tested on 3.10/3.11, so it does not claim them.
+requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Marwa Ben Salem" }]
 keywords = ["rag", "llm", "vector-store", "faiss", "qdrant", "openai", "embeddings", "retrieval"]

@@ -16,6 +16,7 @@ Exporters (controlled by environment variables):
 When OTEL_EXPORTER_OTLP_ENDPOINT is not set, a ConsoleSpanExporter is used
 so traces are always visible in development without any external collector.
 """
+
 from __future__ import annotations
 
 import logging
@@ -61,6 +62,7 @@ def configure_tracing(service_name: Optional[str] = None) -> None:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
                 OTLPSpanExporter,
             )
+
             exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
             logger.info("OTel OTLP exporter configured endpoint=%s", otlp_endpoint)
         except ImportError:
@@ -71,7 +73,9 @@ def configure_tracing(service_name: Optional[str] = None) -> None:
             exporter = ConsoleSpanExporter()
     else:
         exporter = ConsoleSpanExporter()
-        logger.info("OTel ConsoleSpanExporter active (set OTEL_EXPORTER_OTLP_ENDPOINT for production)")
+        logger.info(
+            "OTel ConsoleSpanExporter active (set OTEL_EXPORTER_OTLP_ENDPOINT for production)"
+        )
 
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
@@ -83,6 +87,7 @@ def get_tracer(name: str = "rag-llm-service") -> Any:
     """Return a named tracer.  Returns a no-op tracer if OTel is unavailable."""
     try:
         from opentelemetry import trace
+
         return trace.get_tracer(name)
     except ImportError:
         return _NoOpTracer()
@@ -96,6 +101,7 @@ def current_trace_context() -> dict[str, str]:
     """
     try:
         from opentelemetry import trace
+
         span = trace.get_current_span()
         ctx = span.get_span_context()
         if ctx and ctx.is_valid:
@@ -111,6 +117,7 @@ def current_trace_context() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # No-op fallback so callers don't need to guard every `with tracer.start...`
 # ---------------------------------------------------------------------------
+
 
 class _NoOpSpan:
     def __enter__(self) -> "_NoOpSpan":

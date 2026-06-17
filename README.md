@@ -53,7 +53,7 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 | --- | --- |
 | `rag_llm_infra.llm_protocol` | `LLMProtocol` — `runtime_checkable` Protocol over OpenAI / Anthropic-stub / Mock; factory `get_llm()` |
 | `rag_llm_infra.vector_store` | `VectorStoreProtocol` — in-process FAISS `IndexFlatIP`, pure-NumPy fallback, real **Qdrant** (batched search) |
-| `rag_llm_infra.evidence_index` | `EmbeddingEngine` — SentenceTransformers embeddings + adaptive, memory-pressure-aware LRU cache; reader/writer lock |
+| `rag_llm_infra.evidence_index` | `EmbeddingEngine` — SentenceTransformers embeddings + a memory-pressure-aware cache (insertion-order eviction) guarded by a writer-preferring reader/writer lock, so the slow `model.encode` runs outside the lock |
 | `rag_llm_infra.tracing` | OpenTelemetry spans with console-exporter + no-op fallbacks |
 | `rag_llm_infra.log_config` | structured JSON logging + an `llm_call` latency/token timer |
 | `rag_llm_infra.serve` | FastAPI service (`/index`, `/query`, `/health`) wiring the parts together |

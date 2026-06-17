@@ -5,6 +5,7 @@ Bag-of-tokens hashing into a fixed-width vector. Reproducible across processes
 (uses hashlib, not the salted built-in `hash()`). NOT for production — swap for
 `EmbeddingEngine` (real sentence embeddings).
 """
+
 from __future__ import annotations
 
 import hashlib

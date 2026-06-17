@@ -3,6 +3,7 @@
 Public API: the LLM-provider and vector-store protocols + factories, the cached
 embedding index, and the observability helpers.
 """
+
 from __future__ import annotations
 
 from .evidence_index import CONFIG, EmbeddingEngine, RWLock
@@ -31,16 +32,32 @@ __version__ = "0.1.0"
 
 __all__ = [
     # LLM
-    "LLMProtocol", "OpenAIBackend", "AnthropicBackend", "MockBackend", "get_llm",
+    "LLMProtocol",
+    "OpenAIBackend",
+    "AnthropicBackend",
+    "MockBackend",
+    "get_llm",
     # Vector store
-    "VectorStoreProtocol", "FAISSVectorStore", "NumpyVectorStore", "QdrantVectorStore",
-    "get_vector_store", "FAISS_AVAILABLE", "QDRANT_AVAILABLE",
+    "VectorStoreProtocol",
+    "FAISSVectorStore",
+    "NumpyVectorStore",
+    "QdrantVectorStore",
+    "get_vector_store",
+    "FAISS_AVAILABLE",
+    "QDRANT_AVAILABLE",
     # Embedding index
-    "EmbeddingEngine", "RWLock", "CONFIG",
+    "EmbeddingEngine",
+    "RWLock",
+    "CONFIG",
     # Observability
-    "configure_tracing", "get_tracer", "current_trace_context",
-    "configure_logging", "llm_call",
+    "configure_tracing",
+    "get_tracer",
+    "current_trace_context",
+    "configure_logging",
+    "llm_call",
     # Faithfulness + fallback
-    "groundedness", "FallbackLLM", "BudgetExhausted",
+    "groundedness",
+    "FallbackLLM",
+    "BudgetExhausted",
     "__version__",
 ]
