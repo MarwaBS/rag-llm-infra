@@ -193,8 +193,6 @@ class EmbeddingEngine:
         )
 
     def _normalize_cache_key(self, text: str, namespace: str) -> str:
-        if not text:
-            return ""
         # NFKC unicode canonicalization ONLY. Do NOT lowercase or collapse
         # whitespace: the embedding model is case- and spacing-sensitive ("US"
         # and "us", "a b" and "a  b" embed differently), so the key must keep

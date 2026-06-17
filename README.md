@@ -63,7 +63,7 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 ## Quality gates
 
 ```bash
-python -m eval.retrieval_eval      # recall@1 / MRR on a labelled paraphrase corpus
+python -m eval.retrieval_eval      # recall@1 / MRR — retrieval mechanics over the demo embedder
 python -m eval.generation_eval     # groundedness (faithfulness) of generated answers
 ```
 
