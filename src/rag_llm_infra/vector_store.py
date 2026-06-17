@@ -26,6 +26,7 @@ Three implementations ship:
 The `get_vector_store()` factory selects an implementation by name.
 Default is "auto" → FAISS when available, NumPy otherwise.
 """
+
 from __future__ import annotations
 
 import logging
@@ -57,6 +58,7 @@ NDArrayI64: TypeAlias = npt.NDArray[np.int64]
 # source of truth for "is FAISS importable on this host".
 try:
     from .evidence_index import FAISS_AVAILABLE as _FAISS_AVAILABLE
+
     FAISS_AVAILABLE: bool = _FAISS_AVAILABLE
 except Exception:  # pragma: no cover - defensive
     FAISS_AVAILABLE = False
@@ -68,6 +70,7 @@ if FAISS_AVAILABLE:
 # loads cleanly in environments that don't install it.
 try:
     from qdrant_client import QdrantClient, models as qdrant_models
+
     QDRANT_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover - exercised in envs without qdrant-client
     QDRANT_AVAILABLE = False
@@ -96,10 +99,13 @@ class VectorStoreProtocol(Protocol):
         ...
 
     def search(self, queries: NDArrayF32, k: int) -> Tuple[NDArrayF32, NDArrayI64]:
-        """Return `(distances, indices)` arrays of shape `(Nq, k)`.
+        """Return `(distances, indices)` arrays of shape `(Nq, min(k, size))`.
 
-        Distances are inner-product similarities in `[-1, 1]` (the engine
-        treats them as cosine because both sides are L2-normalized).
+        A store cannot return more results than it holds, so when `k > size`
+        every backend truncates to `size` (rather than padding) — the row width
+        is `min(k, size)` consistently across FAISS / NumPy / Qdrant. `k` must
+        be >= 1. Distances are inner-product similarities in `[-1, 1]` (the
+        engine treats them as cosine because both sides are L2-normalized).
         """
         ...
 
@@ -142,8 +148,12 @@ class FAISSVectorStore:
         self.backend_version = faiss.__version__
 
     def add(self, embeddings: NDArrayF32) -> None:
-        if embeddings.dtype != np.float32:
-            embeddings = embeddings.astype("float32")
+        # Copy. faiss.normalize_L2 normalizes in place, and the old `astype`
+        # guard only copied for non-float32 input — so a float32 caller had its
+        # own array silently normalized as a side effect (NumPy/Qdrant copy, so
+        # the backends disagreed). np.array(..., dtype) always returns a fresh
+        # C-contiguous float32 array.
+        embeddings = np.array(embeddings, dtype=np.float32)
         dim = embeddings.shape[1]
         faiss.normalize_L2(embeddings)
         index = faiss.IndexFlatIP(dim)
@@ -153,10 +163,15 @@ class FAISSVectorStore:
     def search(self, queries: NDArrayF32, k: int) -> Tuple[NDArrayF32, NDArrayI64]:
         if self._index is None:
             raise RuntimeError("FAISSVectorStore.search() called before add()")
-        if queries.dtype != np.float32:
-            queries = queries.astype("float32")
+        if k < 1:
+            raise ValueError(f"k must be >= 1, got {k}")
+        queries = np.array(queries, dtype=np.float32)  # copy before in-place normalize
         faiss.normalize_L2(queries)
-        scores, indices = self._index.search(queries, k)
+        # Ask FAISS for at most `size` neighbours so the row width is
+        # min(k, size) — matching NumPy/Qdrant — instead of FAISS's -1/-inf
+        # padding when k > size.
+        k_eff = min(k, self.size)
+        scores, indices = self._index.search(queries, k_eff)
         return scores, indices
 
     @property
@@ -201,6 +216,8 @@ class NumpyVectorStore:
     def search(self, queries: NDArrayF32, k: int) -> Tuple[NDArrayF32, NDArrayI64]:
         if self._matrix is None:
             raise RuntimeError("NumpyVectorStore.search() called before add()")
+        if k < 1:
+            raise ValueError(f"k must be >= 1, got {k}")
         if queries.dtype != np.float32:
             queries = queries.astype("float32")
         q_norms = np.linalg.norm(queries, axis=1, keepdims=True)
@@ -257,6 +274,7 @@ class QdrantVectorStore:
                 "vector_store_backend (auto|faiss|numpy)."
             )
         import os as _os
+
         self._url = url or _os.getenv("QDRANT_URL") or ":memory:"
         self._collection = collection
         # `QdrantClient(":memory:")` is the embedded in-process mode;
@@ -267,7 +285,11 @@ class QdrantVectorStore:
             self._client = QdrantClient(url=self._url)
         self._dim: Optional[int] = None
         self._size: int = 0
-        self.backend_version = getattr(QdrantClient, "__version__", "unknown")
+        # __version__ is a module attribute, not a class attribute — reading it
+        # off QdrantClient always yielded "unknown".
+        import qdrant_client as _qc
+
+        self.backend_version = getattr(_qc, "__version__", "unknown")
 
     def _ensure_collection(self, dim: int) -> None:
         """Create or recreate the collection with cosine distance.
@@ -312,6 +334,8 @@ class QdrantVectorStore:
     def search(self, queries: NDArrayF32, k: int) -> Tuple[NDArrayF32, NDArrayI64]:
         if self._dim is None or self._size == 0:
             raise RuntimeError("QdrantVectorStore.search() called before add()")
+        if k < 1:
+            raise ValueError(f"k must be >= 1, got {k}")
         if queries.dtype != np.float32:
             queries = queries.astype("float32")
         q_norms = np.linalg.norm(queries, axis=1, keepdims=True)
@@ -328,7 +352,9 @@ class QdrantVectorStore:
         batch_fn = getattr(self._client, "query_batch_points", None)
         if batch_fn is not None:
             requests = [
-                qdrant_models.QueryRequest(query=q.tolist(), limit=k_eff, with_payload=False)
+                qdrant_models.QueryRequest(
+                    query=q.tolist(), limit=k_eff, with_payload=False
+                )
                 for q in normed_queries
             ]
             responses = batch_fn(collection_name=self._collection, requests=requests)
@@ -337,7 +363,9 @@ class QdrantVectorStore:
             hit_lists = []
             for q in normed_queries:
                 resp = self._client.query_points(
-                    collection_name=self._collection, query=q.tolist(), limit=k_eff,
+                    collection_name=self._collection,
+                    query=q.tolist(),
+                    limit=k_eff,
                 )
                 hit_lists.append(resp.points)
 

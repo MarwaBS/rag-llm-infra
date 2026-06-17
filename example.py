@@ -13,6 +13,7 @@ API key, no network, and no native libraries:
 In production, swap the demo embedder for `rag_llm_infra.EmbeddingEngine` (real
 sentence embeddings) and `get_llm("mock")` for `get_llm("openai")`.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional

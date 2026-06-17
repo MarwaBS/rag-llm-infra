@@ -1,14 +1,22 @@
 """Generation-quality (faithfulness) gate.
 
-Runs the retrieval step, builds a grounded answer from the retrieved context, and
-scores its groundedness — then verifies the metric DISCRIMINATES a grounded answer
-from a hallucinated control (same answer + vocabulary absent from the evidence).
+Runs the retrieval step, then checks that the groundedness metric DISCRIMINATES a
+faithful answer (drawn from the evidence) from an independent hallucinated answer
+(plausible-sounding, but every claim absent from the evidence).
 
-Fails CI if the grounded answer scores below threshold or the metric cannot tell a
-hallucination apart.
+Crucially this is a *two-sided* gate: the faithful answer must score ABOVE a high
+threshold AND the hallucinated answer must score BELOW a low one. An earlier
+version built the "grounded" answer by joining the retrieved contexts and the
+"hallucinated" one by appending off-context words to it — so groundedness was
+identically 1.0 and the margin was positive by construction. That gate could
+never fail. This one fails if the metric stops separating the two cases (e.g. a
+metric that always returns 1.0 trips the hallucinated ceiling), if retrieval
+regresses so the faithful answer is no longer supported, or if the margin
+collapses.
 
     python -m eval.generation_eval
 """
+
 from __future__ import annotations
 
 import sys
@@ -23,9 +31,23 @@ DOCS: List[str] = [
     "Retrieval-augmented generation grounds language model output in retrieved documents.",
 ]
 QUERY = "in-process vector similarity search"
-GROUNDED_MIN = 0.90
-# Content tokens that appear in NO document — a hallucination signature.
-OFF_CONTEXT = "bitcoin blockchain quantum supremacy mortgage"
+
+# A faithful answer: an extractive answer whose every content claim is in the
+# top-retrieved document (DOC[0], the unambiguous match for QUERY). It is NOT the
+# join of all contexts — the gate must not be a tautology.
+FAITHFUL_ANSWER = (
+    "FAISS performs in-process vector similarity search with inner product."
+)
+# A hallucinated answer: fluent, on-topic-sounding, but every content word is
+# absent from the evidence. An honest metric must score this near zero.
+HALLUCINATED_ANSWER = (
+    "Bitcoin blockchain mining reached quantum supremacy to approve mortgage "
+    "applications via astrology and homeopathy."
+)
+
+GROUNDED_MIN = 0.90  # a faithful answer must be strongly supported
+HALLUCINATED_MAX = 0.34  # a hallucination must be clearly flagged as unsupported
+MARGIN_MIN = 0.50  # and the two must be well-separated
 
 
 def _retrieve(query: str, k: int = 2) -> List[str]:
@@ -37,11 +59,13 @@ def _retrieve(query: str, k: int = 2) -> List[str]:
 
 def evaluate() -> Dict[str, float]:
     contexts = _retrieve(QUERY)
-    grounded_answer = " ".join(contexts)                         # drawn only from context
-    hallucinated_answer = grounded_answer + " " + OFF_CONTEXT     # + unsupported claim
-    grounded = groundedness(grounded_answer, contexts)
-    hallucinated = groundedness(hallucinated_answer, contexts)
-    return {"grounded": grounded, "hallucinated": hallucinated, "margin": grounded - hallucinated}
+    grounded = groundedness(FAITHFUL_ANSWER, contexts)
+    hallucinated = groundedness(HALLUCINATED_ANSWER, contexts)
+    return {
+        "grounded": grounded,
+        "hallucinated": hallucinated,
+        "margin": grounded - hallucinated,
+    }
 
 
 def main() -> int:
@@ -50,10 +74,23 @@ def main() -> int:
         f"generation eval — grounded={m['grounded']:.3f}  "
         f"hallucinated={m['hallucinated']:.3f}  margin={m['margin']:.3f}"
     )
-    if m["grounded"] < GROUNDED_MIN or m["margin"] <= 0.0:
-        print(f"FAIL: grounded < {GROUNDED_MIN} or metric did not discriminate (margin <= 0)")
+    reasons: List[str] = []
+    if m["grounded"] < GROUNDED_MIN:
+        reasons.append(f"grounded {m['grounded']:.3f} < {GROUNDED_MIN}")
+    if m["hallucinated"] > HALLUCINATED_MAX:
+        reasons.append(
+            f"hallucinated {m['hallucinated']:.3f} > {HALLUCINATED_MAX} (metric did not flag it)"
+        )
+    if m["margin"] < MARGIN_MIN:
+        reasons.append(
+            f"margin {m['margin']:.3f} < {MARGIN_MIN} (metric did not discriminate)"
+        )
+    if reasons:
+        print("FAIL: " + "; ".join(reasons))
         return 1
-    print("PASS: grounded answer is faithful and the metric flags the hallucination")
+    print(
+        "PASS: faithful answer is supported and the hallucination is flagged below ceiling"
+    )
     return 0
 
 

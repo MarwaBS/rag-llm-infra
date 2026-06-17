@@ -17,6 +17,7 @@ usage for every LLM invocation and emits a structured summary::
         result = chain.invoke(inputs)
         ctx["tokens"] = result.usage_metadata.get("total_tokens", 0)
 """
+
 from __future__ import annotations
 
 import json
@@ -26,13 +27,16 @@ import time
 from contextlib import contextmanager
 from typing import Any, Generator, Optional
 
+
 # Injected at format-time so every log record carries the active trace/span IDs.
 def _get_trace_context() -> dict[str, str]:
     try:
         from .tracing import current_trace_context
+
         return current_trace_context()
     except Exception:
         return {"trace_id": "", "span_id": ""}
+
 
 ENV: str = os.getenv("ENV", "dev").lower()
 _CONFIGURED = False
@@ -42,10 +46,9 @@ _CONFIGURED = False
 # JSON formatter
 # ---------------------------------------------------------------------------
 
+
 class _JsonFormatter(logging.Formatter):
     """Emit each record as a single-line JSON object."""
-
-    _SKIP = frozenset(logging.LogRecord.__init__.__code__.co_varnames)
 
     def format(self, record: logging.LogRecord) -> str:
         trace_ctx = _get_trace_context()
@@ -65,11 +68,28 @@ class _JsonFormatter(logging.Formatter):
         # Forward any extra={} fields attached by the caller
         for key, val in record.__dict__.items():
             if key.startswith("_") or key in {
-                "msg", "args", "levelname", "levelno", "pathname",
-                "filename", "module", "exc_info", "exc_text", "stack_info",
-                "lineno", "funcName", "created", "msecs", "relativeCreated",
-                "thread", "threadName", "processName", "process", "name",
-                "message", "asctime",
+                "msg",
+                "args",
+                "levelname",
+                "levelno",
+                "pathname",
+                "filename",
+                "module",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "lineno",
+                "funcName",
+                "created",
+                "msecs",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "processName",
+                "process",
+                "name",
+                "message",
+                "asctime",
             }:
                 continue
             payload[key] = val
@@ -79,6 +99,7 @@ class _JsonFormatter(logging.Formatter):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def configure_logging(level: str = "INFO") -> None:
     """Configure root logger.  Safe to call multiple times — only runs once."""

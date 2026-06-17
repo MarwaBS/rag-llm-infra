@@ -80,16 +80,35 @@ class OpenAIBackend:
                 "Install `openai>=1.0` or pick another backend via get_llm(backend=...)."
             ) from exc
 
-        self._client = openai.OpenAI(api_key=api_key)
-        self._aclient = openai.AsyncOpenAI(api_key=api_key)
+        # Construct the SDK clients lazily, on first use. The previous version
+        # eagerly built BOTH the sync and async client in __init__ — so a purely
+        # sync caller still opened an async client (and an httpx pool) it never
+        # used and never closed. Now only the client a caller actually touches is
+        # created, and both are closeable.
+        self._openai = openai
+        self._api_key = api_key
         self._model = model
+        self._client: Optional[Any] = None
+        self._aclient: Optional[Any] = None
         self.backend_version = openai.__version__
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            self._client = self._openai.OpenAI(api_key=self._api_key)
+        return self._client
+
+    @property
+    def aclient(self) -> Any:
+        if self._aclient is None:
+            self._aclient = self._openai.AsyncOpenAI(api_key=self._api_key)
+        return self._aclient
 
     def invoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
         # openai's SDK uses a typed-dict union for ChatCompletionMessageParam;
         # at runtime it accepts any dict shape with 'role' + 'content'. Our
         # Protocol surface is intentionally the simpler shape, so we cast.
-        resp = self._client.chat.completions.create(
+        resp = self.client.chat.completions.create(
             model=self._model,
             messages=cast(Any, messages),
             **kwargs,
@@ -97,12 +116,22 @@ class OpenAIBackend:
         return cast(str, resp.choices[0].message.content or "")
 
     async def ainvoke(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
-        resp = await self._aclient.chat.completions.create(
+        resp = await self.aclient.chat.completions.create(
             model=self._model,
             messages=cast(Any, messages),
             **kwargs,
         )
         return cast(str, resp.choices[0].message.content or "")
+
+    def close(self) -> None:
+        """Close whichever SDK clients were created (best-effort)."""
+        for client in (self._client, self._aclient):
+            close = getattr(client, "close", None)
+            if close is not None:
+                try:
+                    close()
+                except Exception:  # pragma: no cover - defensive
+                    pass
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +142,7 @@ class AnthropicBackend:
 
     Migration path when promoting to a real backend:
 
-    1. `pip install anthropic` (add to requirements.txt).
+    1. `pip install anthropic` (add it to the project dependencies in pyproject.toml).
     2. Replace both `invoke` / `ainvoke` bodies with calls to
        `anthropic.Anthropic().messages.create(model=..., system=..., messages=...)`
        and `anthropic.AsyncAnthropic()` respectively.
@@ -200,8 +229,7 @@ def get_llm(backend: str = "auto", **kwargs: Any) -> LLMProtocol:
     name = backend.lower()
     if name not in _VALID_BACKENDS:
         raise ValueError(
-            f"Unknown llm backend: {backend!r}. "
-            f"Valid: {' | '.join(_VALID_BACKENDS)}."
+            f"Unknown llm backend: {backend!r}. Valid: {' | '.join(_VALID_BACKENDS)}."
         )
 
     if name in ("auto", "openai"):

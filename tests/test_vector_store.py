@@ -3,6 +3,7 @@
 NumPy is always exercised; FAISS and Qdrant tests skip cleanly when those
 optional backends are not installed.
 """
+
 import numpy as np
 import pytest
 
@@ -77,3 +78,53 @@ class TestQdrantBackend:
         store.add(_orthonormal_corpus())
         _, idx = store.search(np.array([[0, 0, 1]], dtype="float32"), k=1)
         assert idx[0][0] == 2
+
+
+def _available_backends() -> list:
+    items = [("numpy", NumpyVectorStore)]
+    if FAISS_AVAILABLE:
+        items.append(("faiss", FAISSVectorStore))
+    if QDRANT_AVAILABLE:
+        items.append(("qdrant", QdrantVectorStore))
+    return items
+
+
+@pytest.mark.parametrize("name,cls", _available_backends())
+class TestContractAcrossBackends:
+    """Behaviours that MUST hold identically on every backend (the protocol
+    contract), so a swap is truly transparent."""
+
+    def test_k_greater_than_size_truncates_to_size(self, name, cls) -> None:
+        # Row width is min(k, size) on every backend — no FAISS -1/-inf padding.
+        store = cls()
+        store.add(_orthonormal_corpus())  # size == 3
+        scores, idx = store.search(np.array([[1, 0, 0]], dtype="float32"), k=10)
+        assert idx.shape == (1, 3), f"{name}: expected (1, 3), got {idx.shape}"
+        assert scores.shape == (1, 3), f"{name}: scores shape {scores.shape}"
+
+    def test_k_below_one_raises(self, name, cls) -> None:
+        store = cls()
+        store.add(_orthonormal_corpus())
+        with pytest.raises(ValueError):
+            store.search(np.array([[1, 0, 0]], dtype="float32"), k=0)
+
+    def test_add_does_not_mutate_caller_array(self, name, cls) -> None:
+        # FAISS normalized the caller's float32 array in place; NumPy/Qdrant
+        # copied. Use non-unit vectors so any in-place normalize is detectable.
+        store = cls()
+        corpus = np.array(
+            [[3.0, 4.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 2.0]], dtype="float32"
+        )
+        before = corpus.copy()
+        store.add(corpus)
+        assert np.array_equal(corpus, before), (
+            f"{name} mutated the caller's array in add()"
+        )
+
+    def test_search_does_not_mutate_query_array(self, name, cls) -> None:
+        store = cls()
+        store.add(_orthonormal_corpus())
+        q = np.array([[3.0, 4.0, 0.0]], dtype="float32")
+        before = q.copy()
+        store.search(q, k=1)
+        assert np.array_equal(q, before), f"{name} mutated the query array in search()"
