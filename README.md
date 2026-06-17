@@ -71,6 +71,15 @@ Both run in CI: a **retrieval** regression (`recall@1 ≥ 0.80`, `MRR ≥ 0.85`)
 **faithfulness** regression (grounded answer below threshold, or the metric failing
 to flag a hallucinated control) fails the build and cannot merge.
 
+`groundedness` is a **cheap lexical tripwire, not a faithfulness guarantee** — it
+scores token overlap, so by construction it is negation-blind ("X is not Y" looks
+grounded), dilutable (a false clause appended to a true answer only dents the
+score), and propositional claims it can't verify. It catches the common
+out-of-vocabulary hallucination signature cheaply on every generation; pair it with
+an LLM-judge for semantic faithfulness. The limits are spelled out in the
+`faithfulness` module docstring and pinned by tests so they can't be quietly
+oversold later.
+
 ## Engineering principles demonstrated
 
 - **Swap by interface** — `LLMProtocol` / `VectorStoreProtocol` make the model and the index runtime-swappable.

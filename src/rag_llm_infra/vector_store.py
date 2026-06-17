@@ -30,7 +30,7 @@ Default is "auto" → FAISS when available, NumPy otherwise.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Protocol, Tuple, TypeAlias, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 import numpy.typing as npt
@@ -47,12 +47,43 @@ __all__ = [
     "QDRANT_AVAILABLE",
 ]
 
-# Type aliases for the float32/int64 arrays we operate on. Must use the
-# `TypeAlias` annotation (PEP 613) so mypy treats them as types, not as
-# module-level variables (the latter fails with `[valid-type]` under the
-# broader CI lint mypy run).
-NDArrayF32: TypeAlias = npt.NDArray[np.float32]
-NDArrayI64: TypeAlias = npt.NDArray[np.int64]
+# Type aliases for the float32/int64 arrays we operate on. PEP 695 `type`
+# statement (py3.12) so mypy treats them as types, not module-level variables
+# (a plain assignment fails with `[valid-type]` under the CI mypy run).
+type NDArrayF32 = npt.NDArray[np.float32]
+type NDArrayI64 = npt.NDArray[np.int64]
+
+
+def _as_2d_float32(arr: Any, name: str, *, copy: bool = False) -> NDArrayF32:
+    """Validate and coerce an embedding/query batch to an `(N, D)` float32 array.
+
+    Raises a clear `ValueError` for a non-2-D input or for non-finite values,
+    instead of letting an opaque `AxisError` (a 1-D `add`) or a silent NaN
+    (garbage scores) propagate into the backend. Pass `copy=True` when the caller
+    normalizes in place (FAISS) so the caller's own array is never mutated.
+    """
+    a = np.array(arr, dtype=np.float32) if copy else np.asarray(arr, dtype=np.float32)
+    if a.ndim != 2:
+        raise ValueError(
+            f"{name} must be a 2-D (N, D) float array; got {a.ndim}-D with shape "
+            f"{a.shape}. Reshape a single vector via arr.reshape(1, -1)."
+        )
+    if a.size and not np.isfinite(a).all():
+        raise ValueError(
+            f"{name} contains non-finite values (NaN/inf); embeddings must be finite."
+        )
+    return a
+
+
+def _empty_result(n_queries: int) -> tuple[NDArrayF32, NDArrayI64]:
+    """Per the documented contract, an empty store (`size == 0`) returns arrays of
+    width `min(k, size) == 0` rather than diverging per backend (FAISS used to
+    raise a bare AssertionError, Qdrant a misleading "called before add()")."""
+    return (
+        np.empty((n_queries, 0), dtype=np.float32),
+        np.empty((n_queries, 0), dtype=np.int64),
+    )
+
 
 # Re-use the existing capability flag from evidence_index so we have one
 # source of truth for "is FAISS importable on this host".
@@ -69,7 +100,8 @@ if FAISS_AVAILABLE:
 # Qdrant is an optional dev/ops dependency — import lazily so the module
 # loads cleanly in environments that don't install it.
 try:
-    from qdrant_client import QdrantClient, models as qdrant_models
+    from qdrant_client import QdrantClient
+    from qdrant_client import models as qdrant_models
 
     QDRANT_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover - exercised in envs without qdrant-client
@@ -98,14 +130,18 @@ class VectorStoreProtocol(Protocol):
         """Build/replace the index from `(N, D)` float32 embeddings."""
         ...
 
-    def search(self, queries: NDArrayF32, k: int) -> Tuple[NDArrayF32, NDArrayI64]:
+    def search(self, queries: NDArrayF32, k: int) -> tuple[NDArrayF32, NDArrayI64]:
         """Return `(distances, indices)` arrays of shape `(Nq, min(k, size))`.
 
         A store cannot return more results than it holds, so when `k > size`
         every backend truncates to `size` (rather than padding) — the row width
-        is `min(k, size)` consistently across FAISS / NumPy / Qdrant. `k` must
-        be >= 1. Distances are inner-product similarities in `[-1, 1]` (the
-        engine treats them as cosine because both sides are L2-normalized).
+        is `min(k, size)` consistently across FAISS / NumPy / Qdrant. An empty
+        store (`size == 0`, e.g. built from a zero-row `add`) therefore returns
+        `(Nq, 0)`-shaped arrays uniformly, not a backend-specific error. Calling
+        `search` before any `add` is a different case — a programming error — and
+        raises `RuntimeError`. `k` must be >= 1. Distances are inner-product
+        similarities in `[-1, 1]` (the engine treats them as cosine because both
+        sides are L2-normalized).
         """
         ...
 
@@ -144,28 +180,32 @@ class FAISSVectorStore:
                 "FAISSVectorStore requires the `faiss` package. "
                 "Install `faiss-cpu` or set vector_store_backend=numpy."
             )
-        self._index: Optional[Any] = None
+        self._index: Any | None = None
         self.backend_version = faiss.__version__
 
     def add(self, embeddings: NDArrayF32) -> None:
-        # Copy. faiss.normalize_L2 normalizes in place, and the old `astype`
-        # guard only copied for non-float32 input — so a float32 caller had its
-        # own array silently normalized as a side effect (NumPy/Qdrant copy, so
-        # the backends disagreed). np.array(..., dtype) always returns a fresh
-        # C-contiguous float32 array.
-        embeddings = np.array(embeddings, dtype=np.float32)
+        # copy=True: faiss.normalize_L2 normalizes in place, so without a copy a
+        # float32 caller would have its own array silently normalized as a side
+        # effect (NumPy/Qdrant copy, so the backends would disagree).
+        embeddings = _as_2d_float32(embeddings, "embeddings", copy=True)
         dim = embeddings.shape[1]
         faiss.normalize_L2(embeddings)
         index = faiss.IndexFlatIP(dim)
         index.add(embeddings)
         self._index = index
 
-    def search(self, queries: NDArrayF32, k: int) -> Tuple[NDArrayF32, NDArrayI64]:
+    def search(self, queries: NDArrayF32, k: int) -> tuple[NDArrayF32, NDArrayI64]:
         if self._index is None:
             raise RuntimeError("FAISSVectorStore.search() called before add()")
         if k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
-        queries = np.array(queries, dtype=np.float32)  # copy before in-place normalize
+        queries = _as_2d_float32(queries, "queries", copy=True)
+        if queries.shape[1] != self._index.d:
+            raise ValueError(
+                f"query dim {queries.shape[1]} != index dim {self._index.d}"
+            )
+        if self.size == 0:
+            return _empty_result(queries.shape[0])
         faiss.normalize_L2(queries)
         # Ask FAISS for at most `size` neighbours so the row width is
         # min(k, size) — matching NumPy/Qdrant — instead of FAISS's -1/-inf
@@ -204,22 +244,26 @@ class NumpyVectorStore:
     backend_version = np.__version__
 
     def __init__(self) -> None:
-        self._matrix: Optional[NDArrayF32] = None
+        self._matrix: NDArrayF32 | None = None
 
     def add(self, embeddings: NDArrayF32) -> None:
-        if embeddings.dtype != np.float32:
-            embeddings = embeddings.astype("float32")
+        embeddings = _as_2d_float32(embeddings, "embeddings")
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         self._matrix = embeddings / norms
 
-    def search(self, queries: NDArrayF32, k: int) -> Tuple[NDArrayF32, NDArrayI64]:
+    def search(self, queries: NDArrayF32, k: int) -> tuple[NDArrayF32, NDArrayI64]:
         if self._matrix is None:
             raise RuntimeError("NumpyVectorStore.search() called before add()")
         if k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
-        if queries.dtype != np.float32:
-            queries = queries.astype("float32")
+        queries = _as_2d_float32(queries, "queries")
+        if queries.shape[1] != self._matrix.shape[1]:
+            raise ValueError(
+                f"query dim {queries.shape[1]} != index dim {self._matrix.shape[1]}"
+            )
+        if self.size == 0:
+            return _empty_result(queries.shape[0])
         q_norms = np.linalg.norm(queries, axis=1, keepdims=True)
         q_norms[q_norms == 0] = 1.0
         norm_queries = queries / q_norms
@@ -266,7 +310,7 @@ class QdrantVectorStore:
 
     backend_name = "qdrant"
 
-    def __init__(self, url: Optional[str] = None, collection: str = "evidence") -> None:
+    def __init__(self, url: str | None = None, collection: str = "evidence") -> None:
         if not QDRANT_AVAILABLE:
             raise RuntimeError(
                 "QdrantVectorStore requires `qdrant-client`. "
@@ -283,7 +327,7 @@ class QdrantVectorStore:
             self._client = QdrantClient(":memory:")
         else:
             self._client = QdrantClient(url=self._url)
-        self._dim: Optional[int] = None
+        self._dim: int | None = None
         self._size: int = 0
         # __version__ is a module attribute, not a class attribute — reading it
         # off QdrantClient always yielded "unknown".
@@ -309,8 +353,7 @@ class QdrantVectorStore:
         self._dim = dim
 
     def add(self, embeddings: NDArrayF32) -> None:
-        if embeddings.dtype != np.float32:
-            embeddings = embeddings.astype("float32")
+        embeddings = _as_2d_float32(embeddings, "embeddings")
         dim = int(embeddings.shape[1])
         # Qdrant normalizes internally when distance=COSINE, but we still
         # L2-normalize here so the `is_native=True` contract (scores in
@@ -319,25 +362,32 @@ class QdrantVectorStore:
         norms[norms == 0] = 1.0
         normed = embeddings / norms
         self._ensure_collection(dim)
-        self._client.upsert(
-            collection_name=self._collection,
-            points=[
-                qdrant_models.PointStruct(
-                    id=int(i),
-                    vector=normed[i].tolist(),
-                )
-                for i in range(normed.shape[0])
-            ],
-        )
+        # Skip the upsert for a zero-row add — an empty points list trips some
+        # qdrant-client versions. `_dim` is still set, so search distinguishes
+        # "empty store" (returns (Nq, 0)) from "before add" (raises).
+        if normed.shape[0]:
+            self._client.upsert(
+                collection_name=self._collection,
+                points=[
+                    qdrant_models.PointStruct(
+                        id=int(i),
+                        vector=normed[i].tolist(),
+                    )
+                    for i in range(normed.shape[0])
+                ],
+            )
         self._size = int(normed.shape[0])
 
-    def search(self, queries: NDArrayF32, k: int) -> Tuple[NDArrayF32, NDArrayI64]:
-        if self._dim is None or self._size == 0:
+    def search(self, queries: NDArrayF32, k: int) -> tuple[NDArrayF32, NDArrayI64]:
+        if self._dim is None:
             raise RuntimeError("QdrantVectorStore.search() called before add()")
         if k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
-        if queries.dtype != np.float32:
-            queries = queries.astype("float32")
+        queries = _as_2d_float32(queries, "queries")
+        if queries.shape[1] != self._dim:
+            raise ValueError(f"query dim {queries.shape[1]} != index dim {self._dim}")
+        if self._size == 0:
+            return _empty_result(queries.shape[0])
         q_norms = np.linalg.norm(queries, axis=1, keepdims=True)
         q_norms[q_norms == 0] = 1.0
         normed_queries = queries / q_norms

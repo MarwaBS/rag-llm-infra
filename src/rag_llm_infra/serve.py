@@ -12,16 +12,18 @@ production, swap the demo embedder for `EmbeddingEngine` and `get_llm("mock")` f
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import get_llm, get_vector_store
+from . import __version__, get_llm, get_vector_store
 from ._demo import embed
 
-app = FastAPI(title="rag-llm-infra", version="0.1.0")
+# Source the API version from the package so it can never drift from the
+# released wheel (it was hardcoded "0.1.0" while the package was already 0.1.1).
+app = FastAPI(title="rag-llm-infra", version=__version__)
 
 
 @dataclass(frozen=True)
@@ -38,7 +40,7 @@ _index: _Index | None = None
 
 
 class IndexRequest(BaseModel):
-    documents: List[str] = Field(min_length=1)  # empty corpus is meaningless
+    documents: list[str] = Field(min_length=1)  # empty corpus is meaningless
 
 
 class QueryRequest(BaseModel):
@@ -47,12 +49,12 @@ class QueryRequest(BaseModel):
 
 
 @app.get("/health")
-def health() -> Dict[str, str]:
+def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.post("/index", status_code=201)
-def index(req: IndexRequest) -> Dict[str, int]:
+def index(req: IndexRequest) -> dict[str, int]:
     store = get_vector_store("numpy")
     store.add(embed(list(req.documents)))
     global _index

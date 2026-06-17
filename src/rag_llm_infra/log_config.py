@@ -24,8 +24,9 @@ import json
 import logging
 import os
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, Optional
+from typing import Any
 
 
 # Injected at format-time so every log record carries the active trace/span IDs.
@@ -129,8 +130,8 @@ def configure_logging(level: str = "INFO") -> None:
 @contextmanager
 def llm_call(
     operation: str,
-    model: Optional[str] = None,
-    logger: Optional[logging.Logger] = None,
+    model: str | None = None,
+    logger: logging.Logger | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Measure latency + tokens for a single LLM call and log the result.
 

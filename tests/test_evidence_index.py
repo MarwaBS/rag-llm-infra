@@ -188,6 +188,23 @@ class TestEmbeddingEngine:
         assert fake.total_encoded == 1  # encoded once, not twice
         assert eng.get_stats()["cache_hits"] == 1
 
+    def test_duplicate_texts_in_one_batch_encoded_once(self):
+        """Regression: a text repeated within a single embed_batch used to be
+        re-encoded once per occurrence (dedup happened only against the cache, not
+        within the batch). Identical misses must collapse to one encode, and every
+        occurrence must still receive the (identical) vector."""
+        fake = _FakeEmbedder()
+        from rag_llm_infra.evidence_index import EmbeddingEngine
+
+        eng = EmbeddingEngine(model=fake)
+        out = eng.embed_batch(["dup", "unique", "dup", "dup"])
+        assert out.shape == (4, 4)
+        # Two unique texts -> two encoded, not four.
+        assert fake.total_encoded == 2, f"expected 2 encodes, got {fake.total_encoded}"
+        # All three "dup" rows are the same vector.
+        assert np.array_equal(out[0], out[2])
+        assert np.array_equal(out[0], out[3])
+
     def test_cache_key_is_case_and_space_sensitive(self):
         """Regression: the key used to lowercase + collapse whitespace, so "US"
         and "us" collided and the second lookup returned the WRONG vector. They

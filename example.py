@@ -16,7 +16,7 @@ sentence embeddings) and `get_llm("mock")` for `get_llm("openai")`.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from rag_llm_infra import get_llm, get_vector_store
 from rag_llm_infra._demo import embed
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from rag_llm_infra import LLMProtocol
 
 
-def retrieve(docs: List[str], query: str, k: int = 2) -> List[str]:
+def retrieve(docs: list[str], query: str, k: int = 2) -> list[str]:
     """Index `docs` and return the top-`k` most similar to `query`."""
     store = get_vector_store("numpy")  # always available; no native deps
     store.add(embed(docs))
@@ -33,7 +33,7 @@ def retrieve(docs: List[str], query: str, k: int = 2) -> List[str]:
     return [docs[int(i)] for i in indices[0] if i >= 0]
 
 
-def rag_answer(docs: List[str], query: str, llm: "Optional[LLMProtocol]" = None) -> str:
+def rag_answer(docs: list[str], query: str, llm: LLMProtocol | None = None) -> str:
     """Retrieve grounding context, then answer the query with an LLM backend."""
     context = retrieve(docs, query)
     grounded = "\n".join(f"- {d}" for d in context)

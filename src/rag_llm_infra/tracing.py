@@ -21,14 +21,14 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _CONFIGURED = False
 
 
-def configure_tracing(service_name: Optional[str] = None) -> None:
+def configure_tracing(service_name: str | None = None) -> None:
     """
     Set up the OpenTelemetry TracerProvider.
     Safe to call multiple times — only runs once.
@@ -39,12 +39,12 @@ def configure_tracing(service_name: Optional[str] = None) -> None:
 
     try:
         from opentelemetry import trace
+        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import (
             BatchSpanProcessor,
             ConsoleSpanExporter,
         )
-        from opentelemetry.sdk.resources import Resource, SERVICE_NAME
     except ImportError:
         logger.warning(
             "opentelemetry-sdk not installed — tracing disabled. "
@@ -120,7 +120,7 @@ def current_trace_context() -> dict[str, str]:
 
 
 class _NoOpSpan:
-    def __enter__(self) -> "_NoOpSpan":
+    def __enter__(self) -> _NoOpSpan:
         return self
 
     def __exit__(self, *_: Any) -> None:
