@@ -252,6 +252,10 @@ class EmbeddingEngine:
             # Dedup identical misses within this batch by cache key, so a text
             # repeated in `texts` is encoded ONCE rather than once per occurrence
             # (same key == same cached vector, so re-encoding it was pure waste).
+            # "Same key" is NFKC-equality (see `_normalize_cache_key`): two raw
+            # strings that NFKC-normalize identically share one encode and one
+            # vector — consistent with the cache contract, and how a real tokenizer
+            # would treat them anyway.
             unique_keys: list[str] = []
             first_index_for_key: dict[str, int] = {}
             for i in miss_indices:
