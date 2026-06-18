@@ -46,9 +46,14 @@ Audit-driven hardening. Each behavioral fix carries a regression test.
 - **`FallbackLLM` documents its thread-safety contract** and advances its
   budget-exhaustion high-water mark monotonically (`max(...)`), so a concurrent
   call can never regress it.
-- **Release workflow is gated.** Publishing on a `v*` tag now runs the full
-  ruff / format / mypy / pytest / eval suite first, asserts the tag matches the
-  package version, and uploads with `--skip-existing` (idempotent re-push).
+- **Release workflow is gated and uses build-once / promote.** Publishing on a
+  `v*` tag now runs the full ruff / format / mypy / pytest / eval suite first,
+  asserts the tag matches the package version, then builds the wheel + sdist and
+  validates *that artifact* (clean-venv install, import, py.typed-ships check).
+  The publish job downloads and uploads those exact bytes via a workflow
+  artifact instead of rebuilding, so the wheel that reaches PyPI is the one the
+  gate validated — not a fresh, untested build. Upload stays `--skip-existing`
+  (idempotent re-push) and now runs `twine check` first.
 - **Ruff lint tightened** to `F, E, I, B, UP` (import sorting, bugbear, and
   pyupgrade on top of pyflakes/pycodestyle); the codebase was modernized to the
   py3.12 syntax floor (PEP 604 unions, PEP 585 generics, PEP 695 type aliases).
