@@ -44,8 +44,8 @@ jobs:
         run: ruff format --check .
       - name: Type-check (mypy)
         run: mypy src
-      - name: Tests
-        run: pytest -q
+      - name: Tests (same coverage floor as CI)
+        run: pytest -q --cov=src/rag_llm_infra --cov-report=term-missing --cov-fail-under=85
       - name: Retrieval eval gate (recall@1 / MRR)
         run: python -m eval.retrieval_eval
       - name: Generation eval gate (groundedness / faithfulness)

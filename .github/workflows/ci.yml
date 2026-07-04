@@ -33,7 +33,9 @@ jobs:
         run: python -m build
 
       - name: Tests (FAISS / Qdrant backends + serve now exercised, not skipped)
-        run: pytest -q
+        # Coverage floor: measured 93% when the gate was added; 85 is a
+        # tight-but-safe ratchet, not an aspiration.
+        run: pytest -q --cov=src/rag_llm_infra --cov-report=term-missing --cov-fail-under=85
 
       - name: Retrieval eval gate (recall@1 / MRR)
         run: python -m eval.retrieval_eval
