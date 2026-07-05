@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.2] - 2026-06-16
+## [0.1.2] - 2026-07-04
 
 Audit-driven hardening. Each behavioral fix carries a regression test.
 
@@ -33,6 +33,17 @@ Audit-driven hardening. Each behavioral fix carries a regression test.
   repeated inside one batch is now encoded once, not once per occurrence
   (deduplication previously happened only against the cache, not within the
   batch). Regression test asserts one encode per unique text.
+- **`[psutil]` extra activating the memory-pressure-aware cache trim.** psutil
+  was previously undeclared in every dependency group, so the advertised
+  trimming was an unreachable branch in any documented install. It is now an
+  optional extra (`pip install "rag-llm-infra[psutil]"`), ships in the dev
+  group so CI runs the real branch, and the trim/no-trim behavior is pinned by
+  regression tests (oldest entries actually evicted under pressure; nothing
+  evicted without it).
+- **Coverage gate in CI and the release gate** (`--cov-fail-under=85`; measured
+  93% when introduced), plus real-SDK tracing tests: the OpenTelemetry
+  configuration path, the OTLP-endpoint→console-exporter degradation, and
+  valid trace/span IDs from `current_trace_context` inside a live span.
 - **`CHANGELOG.md`** (this file).
 
 ### Changed

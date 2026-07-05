@@ -7,11 +7,12 @@ encode-outside-lock concurrency are all covered without sentence-transformers.
 
 import threading
 import time
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from rag_llm_infra.evidence_index import CONFIG, RWLock
+from rag_llm_infra.evidence_index import CONFIG, PSUTIL_AVAILABLE, RWLock
 
 
 class _FakeEmbedder:
@@ -268,3 +269,87 @@ class TestEmbeddingEngine:
         for t in threads:
             t.join()
         assert not errors
+
+
+@pytest.mark.skipif(not PSUTIL_AVAILABLE, reason="psutil not installed")
+class TestMemoryPressureTrim:
+    """The advertised memory-pressure-aware trimming, exercised for real.
+
+    psutil ships in the dev group (and the ``[psutil]`` extra) precisely so this
+    branch runs in CI instead of being import-guarded dead code. The psutil
+    reading is monkeypatched so the tests control "pressure" deterministically.
+    """
+
+    def _pressured_engine(
+        self, monkeypatch, *, percent: float, cap: int, n_texts: int = 150
+    ):
+        """Engine with `n_texts` distinct cached entries, cache cap `cap`, and
+        psutil reporting `percent` system memory use. Throttle disarmed so the
+        next embed_batch call performs the pressure check."""
+        monkeypatch.setitem(CONFIG, "adaptive_cache", True)
+        monkeypatch.setitem(CONFIG, "memory_warning_threshold", 0.8)
+        import rag_llm_infra.evidence_index as ei
+
+        monkeypatch.setattr(
+            ei,
+            "psutil",
+            SimpleNamespace(virtual_memory=lambda: SimpleNamespace(percent=percent)),
+        )
+        fake = _FakeEmbedder()
+        eng = ei.EmbeddingEngine(model=fake)
+        eng._max_cache_size = cap
+        eng._last_memory_check = time.time()  # throttled during the fill
+        eng.embed_batch([f"pressure text {i}" for i in range(n_texts)])
+        assert eng.get_stats()["cache_size"] == n_texts
+        eng._last_memory_check = 0.0  # disarm the 30s throttle for the next call
+        return eng, fake
+
+    def test_pressure_evicts_oldest_and_shrinks_cap(self, monkeypatch):
+        """Above the threshold, the cache must actually shrink (oldest first)
+        and the cap must come down: reduction = max(100, int(cap * 0.5))."""
+        eng, fake = self._pressured_engine(monkeypatch, percent=95.0, cap=150)
+        eng.embed_batch(["trigger"])  # trips the pressure check
+        assert eng._max_cache_size == 100  # max(100, int(150 * 0.5))
+        assert eng.get_stats()["cache_size"] == 100  # 50 oldest trimmed, +1, -1
+        # Behavioral proof of insertion-order eviction: the OLDEST entry was
+        # evicted (re-embedding it costs a fresh encode), the NEWEST survived
+        # (re-embedding it is a pure cache hit).
+        encoded_before = fake.total_encoded
+        eng.embed_batch(["pressure text 0"])  # oldest -> evicted -> re-encoded
+        assert fake.total_encoded == encoded_before + 1
+        eng.embed_batch(["pressure text 149"])  # newest -> still cached
+        assert fake.total_encoded == encoded_before + 1
+
+    def test_no_pressure_evicts_nothing(self, monkeypatch):
+        """Below the threshold the trim must NOT run: same cap, every entry
+        still a cache hit."""
+        eng, fake = self._pressured_engine(monkeypatch, percent=10.0, cap=400)
+        eng.embed_batch(["trigger"])
+        assert eng._max_cache_size == 400
+        assert eng.get_stats()["cache_size"] == 151  # 150 + "trigger", none evicted
+        encoded_before = fake.total_encoded
+        eng.embed_batch(["pressure text 0"])  # oldest entry is still a hit
+        assert fake.total_encoded == encoded_before
+
+    def test_pressure_poll_is_throttled_even_without_pressure(self, monkeypatch):
+        """Regression: the 30s throttle must reset on every check, not only when
+        pressure is found — otherwise psutil is polled on every call after the
+        first quiet 30s window."""
+        monkeypatch.setitem(CONFIG, "adaptive_cache", True)
+        monkeypatch.setitem(CONFIG, "memory_warning_threshold", 0.8)
+        import rag_llm_infra.evidence_index as ei
+
+        calls = {"n": 0}
+
+        def _counting_virtual_memory():
+            calls["n"] += 1
+            return SimpleNamespace(percent=10.0)
+
+        monkeypatch.setattr(
+            ei, "psutil", SimpleNamespace(virtual_memory=_counting_virtual_memory)
+        )
+        eng = ei.EmbeddingEngine(model=_FakeEmbedder())
+        eng._last_memory_check = 0.0
+        eng.embed_batch(["one"])  # past the throttle -> polls psutil once
+        eng.embed_batch(["two"])  # within 30s of the (quiet) check -> no poll
+        assert calls["n"] == 1

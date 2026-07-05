@@ -15,6 +15,7 @@ retrieval-quality eval gate.
 ```bash
 pip install rag-llm-infra                                   # core (numpy)
 pip install "rag-llm-infra[faiss,qdrant,openai,serve]"      # + native backends, OpenAI, serving
+pip install "rag-llm-infra[psutil]"                         # + memory-pressure-aware cache trimming
 pip install -e ".[dev]"                                     # from a local clone, for development
 ```
 
@@ -53,7 +54,7 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 | --- | --- |
 | `rag_llm_infra.llm_protocol` | `LLMProtocol` — `runtime_checkable` Protocol over OpenAI / Anthropic-stub / Mock; factory `get_llm()` |
 | `rag_llm_infra.vector_store` | `VectorStoreProtocol` — in-process FAISS `IndexFlatIP`, pure-NumPy fallback, real **Qdrant** (batched search) |
-| `rag_llm_infra.evidence_index` | `EmbeddingEngine` — SentenceTransformers embeddings + a memory-pressure-aware cache (insertion-order eviction) guarded by a writer-preferring reader/writer lock, so the slow `model.encode` runs outside the lock |
+| `rag_llm_infra.evidence_index` | `EmbeddingEngine` — SentenceTransformers embeddings + a cache (insertion-order eviction) guarded by a writer-preferring reader/writer lock, so the slow `model.encode` runs outside the lock. Memory-pressure-aware trimming activates with the `[psutil]` extra (`pip install "rag-llm-infra[psutil]"`); without it the cache is fixed-size |
 | `rag_llm_infra.tracing` | OpenTelemetry spans with console-exporter + no-op fallbacks |
 | `rag_llm_infra.log_config` | structured JSON logging + an `llm_call` latency/token timer |
 | `rag_llm_infra.serve` | FastAPI service (`/index`, `/query`, `/health`) wiring the parts together |

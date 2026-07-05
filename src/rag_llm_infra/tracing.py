@@ -52,7 +52,14 @@ def configure_tracing(service_name: str | None = None) -> None:
         )
         return
 
-    svc = service_name or os.getenv("OTEL_SERVICE_NAME", "rag-llm-service")
+    # `if service_name else` rather than `or`: identical semantics (empty
+    # string falls through to the env default), but mypy 2.x infers `str | None`
+    # for the `or` form and Resource attribute values must be non-None.
+    svc = (
+        service_name
+        if service_name
+        else os.getenv("OTEL_SERVICE_NAME", "rag-llm-service")
+    )
     resource = Resource(attributes={SERVICE_NAME: svc})
     provider = TracerProvider(resource=resource)
 
