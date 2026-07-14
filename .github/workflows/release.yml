@@ -87,7 +87,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Download the exact artifact the gate built + validated
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
