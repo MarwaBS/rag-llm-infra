@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Python dependencies (pip / pyproject). Weekly so a new advisory against a
+  # pinned dep surfaces as a PR instead of rotting behind a green badge.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  # GitHub Actions — keeps the CI/release actions current (and, with SHA
+  # pinning later, is what bumps the pinned SHAs).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

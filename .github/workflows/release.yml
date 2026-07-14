@@ -17,6 +17,12 @@ on:
   push:
     tags: ["v*"]
 
+# Least privilege: publishing uses the PYPI_API_TOKEN secret (twine), not the
+# GITHUB_TOKEN, so read-only repo access is all any job here needs. Declaring it
+# caps the token and clears the CodeQL missing-workflow-permissions finding.
+permissions:
+  contents: read
+
 jobs:
   gate:
     runs-on: ubuntu-latest

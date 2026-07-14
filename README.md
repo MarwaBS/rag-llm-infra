@@ -1,6 +1,6 @@
 # RAG + LLM Serving Infrastructure
 
-[![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![CI](https://github.com/MarwaBS/rag-llm-infra/actions/workflows/ci.yml/badge.svg)](https://github.com/MarwaBS/rag-llm-infra/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/rag-llm-infra)](https://pypi.org/project/rag-llm-infra/)
 
 An installable, vendor-neutral foundation for retrieval-augmented LLM applications:
