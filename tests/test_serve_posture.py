@@ -1,6 +1,6 @@
 """Pin the three boundaries SECURITY.md and the serve docstring describe: the
-endpoints take no credential, the JSON formatter does not redact, and importing
-the module configures neither logging nor tracing.
+endpoints take no credential, the JSON formatter does not redact, and neither
+importing the module nor serving a request configures logging or tracing.
 
 Each is asserted as it stands today rather than as it ought to be — an
 undocumented change to any of them is what makes the prose wrong, so the change
@@ -36,20 +36,34 @@ def test_index_and_query_accept_requests_with_no_credential() -> None:
     assert client.post("/query", json={"query": "document"}).status_code == 200
 
 
-def _import_serve_and_report(prelude: str = "") -> str:
-    """Import `serve` in a fresh interpreter; report what got configured.
+_SETUP = """
+import logging
+import rag_llm_infra.serve as serve
+import rag_llm_infra.log_config as lc
+import rag_llm_infra.tracing as tr
+"""
+_REPORT = "print(lc._CONFIGURED, tr._CONFIGURED, bool(logging.getLogger().handlers))"
 
-    Observing the interpreter after a real import catches any route to
-    configuration — an aliased import, an attribute call, a transitive one —
-    where reading the module's own source only catches the shapes it parses for.
+# Enter the client as a context manager so startup/lifespan handlers run, then
+# serve both endpoints so anything configured lazily on first request has run too.
+_EXERCISE = """
+from fastapi.testclient import TestClient
+with TestClient(serve.app) as c:
+    c.post("/index", json={"documents": ["a document"]})
+    c.post("/query", json={"query": "document"})
+"""
+
+
+def _report(body: str = "") -> str:
+    """Run `serve` in a fresh interpreter; report what ended up configured.
+
+    Observing the interpreter after the real thing has run catches any route to
+    configuration — an aliased import, an attribute call, a getattr dispatch, a
+    startup handler, a lazily imported submodule — where reading the module's
+    own source only catches the shapes it is parsed for.
     """
-    probe = (
-        "import rag_llm_infra.serve, logging;"
-        "import rag_llm_infra.log_config as lc, rag_llm_infra.tracing as tr;"
-        "print(lc._CONFIGURED, tr._CONFIGURED, bool(logging.getLogger().handlers))"
-    )
     result = subprocess.run(
-        [sys.executable, "-c", prelude + probe],
+        [sys.executable, "-c", _SETUP + body + _REPORT],
         capture_output=True,
         text=True,
         check=True,
@@ -59,14 +73,23 @@ def _import_serve_and_report(prelude: str = "") -> str:
 
 
 def test_importing_serve_configures_neither_logging_nor_tracing() -> None:
-    assert _import_serve_and_report() == "False False False"
+    assert _report() == "False False False"
 
 
-def test_the_probe_reports_configuration_when_it_actually_happens() -> None:
-    reported = _import_serve_and_report(
-        "import rag_llm_infra.log_config as _lc; _lc.configure_logging();"
-    )
-    assert reported != "False False False", reported
+def test_serving_requests_configures_neither_logging_nor_tracing() -> None:
+    assert _report(_EXERCISE) == "False False False"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "lc.configure_logging()\n",
+        "tr.configure_tracing()\n",
+        "logging.getLogger().addHandler(logging.StreamHandler())\n",
+    ],
+)
+def test_the_probe_reports_configuration_when_it_actually_happens(body: str) -> None:
+    assert _report(body) != "False False False"
 
 
 def test_the_json_formatter_forwards_caller_supplied_fields_verbatim() -> None:
