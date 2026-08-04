@@ -4,15 +4,16 @@ Runs the retrieval step, then checks that the groundedness metric DISCRIMINATES 
 faithful answer (drawn from the evidence) from an independent hallucinated answer
 (plausible-sounding, but every claim absent from the evidence).
 
-Crucially this is a *two-sided* gate: the faithful answer must score ABOVE a high
-threshold AND the hallucinated answer must score BELOW a low one. An earlier
-version built the "grounded" answer by joining the retrieved contexts and the
-"hallucinated" one by appending off-context words to it — so groundedness was
-identically 1.0 and the margin was positive by construction. That gate could
-never fail. This one fails if the metric stops separating the two cases (e.g. a
-metric that always returns 1.0 trips the hallucinated ceiling), if retrieval
-regresses so the faithful answer is no longer supported, or if the margin
-collapses.
+The gate is two-sided: the faithful answer must score above a floor AND the
+hallucinated answer below a ceiling, with a minimum margin between them. It fails
+if the metric stops separating the two cases (a metric returning any constant
+trips either the ceiling or the floor), if retrieval regresses so the faithful
+answer is no longer supported, or if the margin collapses.
+
+The floor is the weak side: `FAITHFUL_ANSWER` is `DOCS[0]` verbatim, so it scores
+1.0 by identity and the floor cannot discriminate. The ceiling and the margin are
+what this gate rests on; `tests/test_faithfulness.py` is what holds the metric
+itself.
 
     python -m eval.generation_eval
 """
@@ -31,9 +32,8 @@ DOCS: list[str] = [
 ]
 QUERY = "in-process vector similarity search"
 
-# A faithful answer: an extractive answer whose every content claim is in the
-# top-retrieved document (DOC[0], the unambiguous match for QUERY). It is NOT the
-# join of all contexts — the gate must not be a tautology.
+# A faithful answer: DOCS[0] verbatim, the unambiguous match for QUERY. See the
+# module docstring on why this makes the floor non-discriminating.
 FAITHFUL_ANSWER = (
     "FAISS performs in-process vector similarity search with inner product."
 )

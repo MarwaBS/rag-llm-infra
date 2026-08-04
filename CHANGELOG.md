@@ -76,13 +76,12 @@ Hardening release. Each behavioral fix carries a regression test.
   and generation eval gates, the wheel/sdist build, and the end-to-end example.
 - Real, tested Qdrant backend (`QdrantVectorStore`) replacing the Pinecone stub,
   proving the `VectorStoreProtocol` swap path end-to-end with batched search.
-- Two-sided faithfulness eval gate: the faithful answer must score above a high
-  threshold AND the hallucinated control below a low one, replacing a
-  margin-only check that a metric returning `1.0` for everything would pass.
-  The faithful answer is still an extract of a retrieved context, so it scores
-  `1.000` by construction and the high threshold is not yet load-bearing;
-  `tests/test_faithfulness.py`, not this gate, is what currently holds the
-  metric.
+- Two-sided faithfulness eval gate: an absolute ceiling on the hallucinated
+  control, and the margin requirement raised from merely positive to `0.50`,
+  alongside the existing floor on the faithful answer. That faithful answer is
+  a retrieved document verbatim, so it scores `1.000` by identity and the floor
+  is not load-bearing; `tests/test_faithfulness.py`, not this gate, is what
+  holds the metric.
 - Budget-aware `FallbackLLM` with a permanent budget-exhaustion trip.
 
 ### Fixed
