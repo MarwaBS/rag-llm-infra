@@ -3,7 +3,7 @@ Structured logging configuration.
 
 Usage (call once at application startup)::
 
-    from log_config import configure_logging
+    from rag_llm_infra import configure_logging
     configure_logging()
 
 In production (ENV=prod) log records are emitted as single-line JSON objects

@@ -7,17 +7,18 @@ name = "rag-llm-infra"
 version = "0.1.2"
 description = "Vendor-neutral RAG + LLM serving infrastructure: swappable LLM protocol and vector store (FAISS/NumPy/Qdrant), cached embedding index, and observability."
 readme = "README.md"
-# 3.12 to match the single tested/configured version (CI matrix, ruff
-# target-version, mypy python_version, and the 3.12 classifier). The project was
-# not tested on 3.10/3.11, so it does not claim them.
-requires-python = ">=3.12"
+# Bounded at both ends: `>=3.12` alone also claims every future release. Raise
+# the ceiling in the commit that adds the CI matrix leg, never before.
+requires-python = ">=3.12,<3.14"
 license = "MIT"
 authors = [{ name = "Marwa Ben Salem" }]
 keywords = ["rag", "llm", "vector-store", "faiss", "qdrant", "openai", "embeddings", "retrieval"]
 classifiers = [
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "License :: OSI Approved :: MIT License",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
 ]
 dependencies = ["numpy>=1.26"]
 

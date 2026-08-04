@@ -65,8 +65,9 @@ class LLMProtocol(Protocol):
 class OpenAIBackend:
     """Wraps `openai.OpenAI` / `openai.AsyncOpenAI`.
 
-    The `model` default (gpt-4o) matches the existing direct call sites.
-    `api_key` falls through to `OPENAI_API_KEY` env when None.
+    `model` and `api_key` are pass-through defaults, not recommendations: no
+    model was benchmarked here, and `api_key=None` falls through to the SDK's
+    own `OPENAI_API_KEY` lookup. Pass `model=` to pin the one you have measured.
     """
 
     backend_name = "openai"
@@ -80,11 +81,8 @@ class OpenAIBackend:
                 "Install `openai>=1.0` or pick another backend via get_llm(backend=...)."
             ) from exc
 
-        # Construct the SDK clients lazily, on first use. The previous version
-        # eagerly built BOTH the sync and async client in __init__ — so a purely
-        # sync caller still opened an async client (and an httpx pool) it never
-        # used and never closed. Now only the client a caller actually touches is
-        # created, and both are closeable.
+        # Construct the SDK clients lazily: building both eagerly would open an
+        # httpx pool a purely sync caller never touches and never closes.
         self._openai = openai
         self._api_key = api_key
         self._model = model
@@ -219,7 +217,11 @@ def get_llm(backend: str = "auto", **kwargs: Any) -> LLMProtocol:
     """Select an `LLMProtocol` implementation by name.
 
     `backend`:
-        - `auto`      — picks OpenAI (the only production backend today).
+        - `auto`      — an alias for `openai`, not a capability probe. Raises
+                        when `openai` is absent rather than degrading to
+                        `mock`: a fake answer is worse than no answer. Unlike
+                        `get_vector_store("auto")`, where every backend
+                        returns real neighbours and falling back is safe.
         - `openai`    — explicit OpenAI.
         - `anthropic` — stub; raises at call time (see AnthropicBackend).
         - `mock`      — deterministic, for tests.

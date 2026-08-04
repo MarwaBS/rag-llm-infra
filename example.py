@@ -5,9 +5,11 @@ End-to-end retrieval-augmented generation, wired from this package's parts.
                      → build a grounded prompt → answer with an LLMProtocol backend
 
 Runs on the NumPy vector store and the deterministic mock LLM, so it needs no
-API key, no network, and no native libraries:
+API key, no network, and no native libraries. This file ships in the repository,
+not in the wheel, so run it from a clone::
 
-    pip install rag-llm-infra
+    git clone https://github.com/MarwaBS/rag-llm-infra && cd rag-llm-infra
+    pip install -e .
     python example.py
 
 In production, swap the demo embedder for `rag_llm_infra.EmbeddingEngine` (real

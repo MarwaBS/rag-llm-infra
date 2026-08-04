@@ -69,11 +69,10 @@ except ImportError:
 class RWLock:
     """Reader-writer lock: concurrent reads, exclusive writes, writer-preferring.
 
-    Writer preference avoids writer starvation: once a writer is waiting, new
-    readers queue behind it (the previous version let a steady stream of readers
-    keep `_readers > 0` forever, so a waiting writer could never proceed). Used
-    by EmbeddingEngine — short read-locked cache lookups, exclusive write-locked
-    inserts/trims — with the slow `model.encode` happening outside the lock.
+    Writer preference: once a writer is waiting, new readers queue behind it, so
+    a steady stream of readers cannot hold `_readers > 0` forever and starve it.
+    Used by EmbeddingEngine — short read-locked cache lookups, exclusive
+    write-locked inserts/trims — with the slow `model.encode` outside the lock.
     """
 
     def __init__(self) -> None:
@@ -149,10 +148,10 @@ class EmbeddingEngine:
     Concurrency: a reader-writer lock (``RWLock``) guards the cache. Lookups take
     the read lock (so cache hits run concurrently), and the slow
     ``model.encode`` of cache misses runs OUTSIDE the lock — only the resulting
-    inserts take the exclusive write lock. The previous version held one lock
-    across the whole call, so every cache hit blocked behind another thread's
-    inference. Eviction is insertion-order (oldest first); a read does not
-    refresh recency, which is what lets lookups avoid the write lock.
+    inserts take the exclusive write lock, so a cache hit never blocks behind
+    another thread's inference. Eviction is insertion-order (oldest first); a
+    read does not refresh recency, which is what lets lookups avoid the write
+    lock.
     """
 
     def __init__(
@@ -165,7 +164,7 @@ class EmbeddingEngine:
         """
         model: inject a pre-built embedder (anything with
             ``encode(list[str], convert_to_numpy=..., show_progress_bar=...) ->
-            ndarray``). Lets the engine be exercised without sentence-transformers
+            ndarray``). Lets the cache be exercised without sentence-transformers
             and lets callers supply a custom model. When None, a
             ``SentenceTransformer`` is loaded.
         revision: pin the model revision for reproducible loads. Defaults to
@@ -207,10 +206,8 @@ class EmbeddingEngine:
             return
         if time.time() - self._last_memory_check < 30:
             return
-        # Reset the throttle as soon as we pass it, regardless of whether
-        # pressure is found. The old code only updated the timestamp inside the
-        # pressure branch, so once 30s elapsed without pressure, psutil was
-        # polled on EVERY subsequent call.
+        # Reset the throttle here, not inside the pressure branch: otherwise a
+        # quiet period past the interval polls psutil on every subsequent call.
         self._last_memory_check = time.time()
         try:
             memory_percent = psutil.virtual_memory().percent

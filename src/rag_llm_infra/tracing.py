@@ -3,7 +3,7 @@ OpenTelemetry distributed tracing configuration.
 
 Usage (call once at application startup)::
 
-    from tracing import configure_tracing
+    from rag_llm_infra import configure_tracing
     configure_tracing()
 
 Traces flow across the request path: retrieval → LLM call → downstream work.

@@ -13,8 +13,7 @@ Three implementations ship:
   - `FAISSVectorStore`   — in-process FAISS IndexFlatIP (default when
                            FAISS is available)
   - `NumpyVectorStore`   — pure-numpy fallback for environments without
-                           a working FAISS install (also used by the
-                           engine for small corpora, `len(chunks) <= 10`)
+                           a working FAISS install
   - `QdrantVectorStore`  — real, tested Qdrant backend. Defaults to
                            `QdrantClient(":memory:")` for test parity;
                            set `QDRANT_URL` to point at a managed Qdrant
@@ -77,8 +76,8 @@ def _as_2d_float32(arr: Any, name: str, *, copy: bool = False) -> NDArrayF32:
 
 def _empty_result(n_queries: int) -> tuple[NDArrayF32, NDArrayI64]:
     """Per the documented contract, an empty store (`size == 0`) returns arrays of
-    width `min(k, size) == 0` rather than diverging per backend (FAISS used to
-    raise a bare AssertionError, Qdrant a misleading "called before add()")."""
+    width `min(k, size) == 0` on every backend, rather than each raising its own
+    error for a case the contract says is legal."""
     return (
         np.empty((n_queries, 0), dtype=np.float32),
         np.empty((n_queries, 0), dtype=np.int64),
@@ -140,8 +139,8 @@ class VectorStoreProtocol(Protocol):
         `(Nq, 0)`-shaped arrays uniformly, not a backend-specific error. Calling
         `search` before any `add` is a different case — a programming error — and
         raises `RuntimeError`. `k` must be >= 1. Distances are inner-product
-        similarities in `[-1, 1]` (the engine treats them as cosine because both
-        sides are L2-normalized).
+        similarities in `[-1, 1]`, equal to cosine because both sides are
+        L2-normalized.
         """
         ...
 
@@ -232,12 +231,13 @@ class FAISSVectorStore:
 
 
 # ---------------------------------------------------------------------------
-# Numpy fallback — used when FAISS is not installed or the corpus is tiny
+# Numpy fallback — used when FAISS is not installed
 # ---------------------------------------------------------------------------
 class NumpyVectorStore:
     """Pure-numpy fallback. Stores `(N, D)` row-normalized matrix and runs
-    cosine similarity via a single matmul. Acceptable for small corpora
-    (the engine's existing rule: `len(chunks) <= 10` → numpy).
+    cosine similarity via a single matmul — every query scores every vector,
+    so cost is linear in corpus size. No corpus size at which FAISS overtakes
+    it has been measured here; pick a backend by measuring your own corpus.
     """
 
     backend_name = "numpy"
