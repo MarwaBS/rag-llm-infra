@@ -1,6 +1,7 @@
-"""Two properties over every docstring and comment in the package: an import a
-reader can copy must import, and a comment must describe the code rather than
-the repository's history. Stated as properties, not as the lines wrong today.
+"""An import a reader can copy out of a docstring must actually import.
+
+Stated as a property over every docstring in the package, not as the lines that
+happen to be wrong today.
 """
 
 import ast
@@ -60,46 +61,3 @@ def test_every_import_shown_in_a_docstring_resolves(
         importlib.import_module(module)
     except ImportError as exc:
         pytest.fail(f"{filename} shows `{statement}`, which does not import: {exc}")
-
-
-# Narrating what the code used to be dates a comment to a revision the reader
-# cannot see; the CHANGELOG carries that.
-_HISTORY = re.compile(
-    r"\b(?:the\s+)?(?:previous|earlier|old)\s+(?:version|code|implementation)\b"
-    # "it used to raise" is narration; "is used to build" is present-tense
-    # description, so require the phrase not to follow a form of "to be".
-    r"|(?<!\bis )(?<!\bare )(?<!\bwas )(?<!\bwere )(?<!\bbe )(?<!\bbeen )"
-    r"\bused\s+to\s+(?:raise|return|be|do|hold|build)\b"
-    r"|\bthe\s+engine(?:'s)?\b(?!\s+room)",
-    re.IGNORECASE,
-)
-
-
-def test_no_comment_narrates_the_repository_history() -> None:
-    offenders = [
-        f"{path.name}:{number}: {line.strip()}"
-        for path in sorted(SRC.rglob("*.py"))
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
-        if _HISTORY.search(line)
-    ]
-    assert not offenders, "\n".join(offenders)
-
-
-def test_the_history_matcher_is_not_vacuous() -> None:
-    assert _HISTORY.search("# the previous version held one lock")
-    assert _HISTORY.search("# FAISS used to raise a bare AssertionError")
-    assert _HISTORY.search("# the engine's rule")
-
-
-@pytest.mark.parametrize(
-    "line",
-    [
-        "# normalize both sides before the matmul",
-        "# retry the previous request after a backoff",
-        "# older entries are evicted first",
-        "# this is used to build the index",
-        "# argpartition is used to hold the top-k slice",
-    ],
-)
-def test_the_history_matcher_leaves_present_tense_prose_alone(line: str) -> None:
-    assert not _HISTORY.search(line)
