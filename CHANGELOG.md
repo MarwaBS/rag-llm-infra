@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2] - 2026-07-04
 
-Audit-driven hardening. Each behavioral fix carries a regression test.
+Hardening release. Each behavioral fix carries a regression test.
 
 ### Fixed
 - **Packaging: the `py.typed` marker now ships in the wheel.** Without it (PEP
