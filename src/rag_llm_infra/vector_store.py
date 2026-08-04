@@ -17,10 +17,9 @@ Three implementations ship:
   - `QdrantVectorStore`  — real, tested Qdrant backend. Defaults to
                            `QdrantClient(":memory:")` for test parity;
                            set `QDRANT_URL` to point at a managed Qdrant
-                           instance in production. This replaces the old
-                           Pinecone stub and proves the Protocol
-                           abstraction is swap-able end-to-end, not
-                           aspirational.
+                           instance in production. A managed backend behind
+                           the same Protocol, so the abstraction is
+                           exercised rather than asserted.
 
 The `get_vector_store()` factory selects an implementation by name.
 Default is "auto" → FAISS when available, NumPy otherwise.
@@ -304,8 +303,8 @@ class QdrantVectorStore:
     endpoint by setting the `QDRANT_URL` environment variable (read on
     construction).
 
-    Replaces the old `PineconeVectorStore` stub. The earlier stub
-    documented the swap path; this class executes it.
+    A third backend behind the same Protocol, so the swap path is executed
+    rather than merely described.
     """
 
     backend_name = "qdrant"
@@ -329,8 +328,7 @@ class QdrantVectorStore:
             self._client = QdrantClient(url=self._url)
         self._dim: int | None = None
         self._size: int = 0
-        # __version__ is a module attribute, not a class attribute — reading it
-        # off QdrantClient always yielded "unknown".
+        # __version__ is a module attribute, not a class attribute.
         import qdrant_client as _qc
 
         self.backend_version = getattr(_qc, "__version__", "unknown")

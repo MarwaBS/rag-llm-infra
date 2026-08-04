@@ -164,8 +164,8 @@ class EmbeddingEngine:
         """
         model: inject a pre-built embedder (anything with
             ``encode(list[str], convert_to_numpy=..., show_progress_bar=...) ->
-            ndarray``). Lets the cache be exercised without sentence-transformers
-            and lets callers supply a custom model. When None, a
+            ndarray``). Lets the engine run without sentence-transformers and
+            lets callers supply a custom model. When None, a
             ``SentenceTransformer`` is loaded.
         revision: pin the model revision for reproducible loads. Defaults to
             ``CONFIG['embedding_model_revision']`` (env EVIDENCE_EMBEDDING_REVISION).
@@ -248,7 +248,7 @@ class EmbeddingEngine:
         if miss_indices:
             # Dedup identical misses within this batch by cache key, so a text
             # repeated in `texts` is encoded ONCE rather than once per occurrence
-            # (same key == same cached vector, so re-encoding it was pure waste).
+            # (same key == same cached vector, so one encode covers both).
             # "Same key" is NFKC-equality (see `_normalize_cache_key`): two raw
             # strings that NFKC-normalize identically share one encode and one
             # vector — consistent with the cache contract, and how a real tokenizer

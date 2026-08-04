@@ -12,10 +12,8 @@ production, swap the demo embedder for `EmbeddingEngine` and `get_llm("mock")` f
 replace the corpus and read it back. Put it behind your own auth before exposing
 it.
 
-Logging and tracing stay the caller's to configure. `configure_logging()` returns
-without installing its formatter once the root logger has any handler, and a
-server such as uvicorn installs one first — so calling it here would look like
-structured logging while changing nothing.
+This module configures neither logging nor tracing. `configure_logging()` and
+`configure_tracing()` are yours to call at startup, before the app is imported.
 """
 
 from __future__ import annotations
@@ -30,16 +28,14 @@ from pydantic import BaseModel, Field
 from . import __version__, get_llm, get_vector_store
 from ._demo import embed
 
-# Source the API version from the package so it can never drift from the
-# released wheel (it was hardcoded "0.1.0" while the package was already 0.1.1).
+# Sourced from the package so the served version cannot drift from the wheel's.
 app = FastAPI(title="rag-llm-infra", version=__version__)
 
 
 @dataclass(frozen=True)
 class _Index:
-    """Immutable (docs, store) snapshot, swapped atomically. A single reference
-    means /query never pairs a new store with stale docs (the old two-key state
-    could be read mid-swap and IndexError)."""
+    """Immutable (docs, store) snapshot, swapped atomically. One reference means
+    /query cannot read a new store paired with stale docs and IndexError."""
 
     docs: tuple[str, ...]
     store: Any

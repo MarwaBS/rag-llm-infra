@@ -74,7 +74,7 @@ class OpenAIBackend:
 
     def __init__(self, model: str = "gpt-4o", api_key: str | None = None) -> None:
         try:
-            import openai  # imported lazily so `import llm_protocol` works without the SDK
+            import openai  # lazy: importing this module must not need the SDK
         except ImportError as exc:
             raise RuntimeError(
                 "OpenAIBackend requires the `openai` package. "
