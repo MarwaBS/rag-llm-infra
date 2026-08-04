@@ -43,9 +43,10 @@ pip install "rag-llm-infra[serve]"
 uvicorn rag_llm_infra.serve:app          # or: docker build -t rag-llm-infra . && docker run -p 8000:8000 rag-llm-infra
 ```
 
-> `/index` and `/query` are **unauthenticated**. The bare `uvicorn` line binds
-> `127.0.0.1`; the container binds `0.0.0.0` and publishes 8000, so put your own
-> auth in front of that one — see [SECURITY.md](SECURITY.md).
+> `/index` and `/query` are **unauthenticated**. `uvicorn` defaults to
+> `127.0.0.1` unless `--host` or `UVICORN_HOST` says otherwise; the container
+> passes `--host 0.0.0.0` and publishes 8000, so put your own auth in front of
+> the container — see [SECURITY.md](SECURITY.md).
 
 ```bash
 curl -XPOST localhost:8000/index -d '{"documents":["FAISS is in-process vector search","Qdrant is a vector database"]}' -H 'content-type: application/json'

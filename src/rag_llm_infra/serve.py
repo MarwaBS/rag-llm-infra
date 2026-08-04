@@ -12,10 +12,9 @@ production, swap the demo embedder for `EmbeddingEngine` and `get_llm("mock")` f
 replace the corpus and read it back. Put it behind your own auth before exposing
 it.
 
-This module configures neither logging nor tracing. `configure_logging()` and
-`configure_tracing()` are yours to call. The command above hands the import to
-uvicorn, leaving no point to call them first, so call them from your own module
-and point uvicorn at that instead.
+This module configures neither logging nor tracing. The command above hands the
+import to uvicorn, so call `configure_logging()` / `configure_tracing()` from
+your own module and point uvicorn at that.
 """
 
 from __future__ import annotations
