@@ -4,7 +4,8 @@ name: Release to PyPI
 # Requires a repository secret `PYPI_API_TOKEN` (a PyPI API token).
 #
 # Publishing is GATED and uses build-once / promote: the `gate` job runs the
-# same lint / format / type / test / eval suite that guards `main`, then builds
+# same lint / format / type / test / eval suite that guards `main` — on 3.12
+# only, where `main` runs the full matrix — then builds
 # the wheel + sdist and validates THAT artifact (installs the built wheel in a
 # clean venv, imports it, and checks the py.typed marker ships). The exact bytes
 # it built and validated are uploaded as a workflow artifact; the `publish` job

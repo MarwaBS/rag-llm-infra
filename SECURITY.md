@@ -26,7 +26,7 @@ within 30 days, then publish a patched `0.1.x` release to PyPI.
 caller's inputs and provider credentials, and stores no secrets. The optional
 Qdrant backend connects only to the URL the caller supplies.
 
-It also ships two things that run as a service, and they carry the caveats below.
+Two caveats qualify that.
 
 **`rag_llm_infra.serve` has no authentication.** Installed with the `serve`
 extra and used as the `Dockerfile`'s entrypoint, it exposes `/health`, `/index`
@@ -36,7 +36,8 @@ limit and no bound on request size. It is a reference wiring of the library's
 parts, not a hardened service — put it behind your own authentication, or do not
 expose it.
 
-**The JSON log formatter does not redact.** `log_config` forwards every field a
-caller attaches via `extra={...}` into the log line verbatim. The library reads
-no credentials of its own and logs none, but it will faithfully log a secret you
-hand it — keep credentials out of `extra`.
+**The JSON log formatter does not redact.** `log_config` forwards the fields a
+caller attaches via `extra={...}` into the log line verbatim; only names
+beginning with `_` are dropped. The library reads no credentials of its own and
+logs none, but it will faithfully log a secret you hand it — keep credentials
+out of `extra`.
