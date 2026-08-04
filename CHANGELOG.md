@@ -77,8 +77,12 @@ Audit-driven hardening. Each behavioral fix carries a regression test.
 - Real, tested Qdrant backend (`QdrantVectorStore`) replacing the Pinecone stub,
   proving the `VectorStoreProtocol` swap path end-to-end with batched search.
 - Two-sided faithfulness eval gate: the faithful answer must score above a high
-  threshold AND the hallucinated control below a low one, so the gate can fail
-  (the earlier construction made groundedness identically `1.0`).
+  threshold AND the hallucinated control below a low one, replacing a
+  margin-only check that a metric returning `1.0` for everything would pass.
+  The faithful answer is still an extract of a retrieved context, so it scores
+  `1.000` by construction and the high threshold is not yet load-bearing;
+  `tests/test_faithfulness.py`, not this gate, is what currently holds the
+  metric.
 - Budget-aware `FallbackLLM` with a permanent budget-exhaustion trip.
 
 ### Fixed

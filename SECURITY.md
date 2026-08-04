@@ -22,8 +22,21 @@ within 30 days, then publish a patched `0.1.x` release to PyPI.
 
 ## Scope
 
-`rag-llm-infra` is a library: it runs in the caller's process with the caller's
-inputs and provider credentials. It ships no server and stores no secrets.
-Credentials (e.g. `OPENAI_API_KEY`) are read from the environment by the caller
-and are never logged by the library. The optional Qdrant backend connects only
-to the URL the caller supplies.
+`rag-llm-infra` is primarily a library: it runs in the caller's process with the
+caller's inputs and provider credentials, and stores no secrets. The optional
+Qdrant backend connects only to the URL the caller supplies.
+
+It also ships two things that run as a service, and they carry the caveats below.
+
+**`rag_llm_infra.serve` has no authentication.** Installed with the `serve`
+extra and used as the `Dockerfile`'s entrypoint, it exposes `/health`, `/index`
+and `/query`. Any caller who can reach the port can replace the whole corpus via
+`/index` and read back document text via `/query`; there is no key, no rate
+limit and no bound on request size. It is a reference wiring of the library's
+parts, not a hardened service — put it behind your own authentication, or do not
+expose it.
+
+**The JSON log formatter does not redact.** `log_config` forwards every field a
+caller attaches via `extra={...}` into the log line verbatim. The library reads
+no credentials of its own and logs none, but it will faithfully log a secret you
+hand it — keep credentials out of `extra`.

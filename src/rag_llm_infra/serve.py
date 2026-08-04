@@ -7,6 +7,15 @@ Runs on the NumPy vector store + a deterministic demo embedder + the Mock LLM, s
 it needs no API key. The corpus is held in process (single replica). For
 production, swap the demo embedder for `EmbeddingEngine` and `get_llm("mock")` for
 `get_llm("openai")`.
+
+`/index` and `/query` are unauthenticated: anyone who reaches the port can
+replace the corpus and read it back. Put it behind your own auth before exposing
+it.
+
+Logging and tracing stay the caller's to configure. `configure_logging()` returns
+without installing its formatter once the root logger has any handler, and a
+server such as uvicorn installs one first — so calling it here would look like
+structured logging while changing nothing.
 """
 
 from __future__ import annotations

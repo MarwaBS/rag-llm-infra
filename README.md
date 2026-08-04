@@ -43,6 +43,9 @@ pip install "rag-llm-infra[serve]"
 uvicorn rag_llm_infra.serve:app          # or: docker build -t rag-llm-infra . && docker run -p 8000:8000 rag-llm-infra
 ```
 
+> `/index` and `/query` are **unauthenticated**. Bind to localhost or put your
+> own auth in front before exposing the port — see [SECURITY.md](SECURITY.md).
+
 ```bash
 curl -XPOST localhost:8000/index -d '{"documents":["FAISS is in-process vector search","Qdrant is a vector database"]}' -H 'content-type: application/json'
 curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'content-type: application/json'
@@ -57,7 +60,7 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 | `rag_llm_infra.evidence_index` | `EmbeddingEngine` — SentenceTransformers embeddings + a cache (insertion-order eviction) guarded by a writer-preferring reader/writer lock, so the slow `model.encode` runs outside the lock. Memory-pressure-aware trimming activates with the `[psutil]` extra (`pip install "rag-llm-infra[psutil]"`); without it the cache is fixed-size |
 | `rag_llm_infra.tracing` | OpenTelemetry spans with console-exporter + no-op fallbacks |
 | `rag_llm_infra.log_config` | structured JSON logging + an `llm_call` latency/token timer |
-| `rag_llm_infra.serve` | FastAPI service (`/index`, `/query`, `/health`) wiring the parts together |
+| `rag_llm_infra.serve` | FastAPI service (`/index`, `/query`, `/health`) over the vector store + LLM protocol. **No authentication** — see [SECURITY.md](SECURITY.md). Does not install `log_config` or `tracing`; call those yourself at startup |
 | `rag_llm_infra.faithfulness` | `groundedness(answer, contexts)` — lexical faithfulness metric for RAG output |
 | `rag_llm_infra.fallback` | `FallbackLLM` — budget-aware multi-provider routing; drop-in `LLMProtocol` |
 
@@ -84,7 +87,7 @@ oversold later.
 ## Engineering principles demonstrated
 
 - **Swap by interface** — `LLMProtocol` / `VectorStoreProtocol` make the model and the index runtime-swappable.
-- **Degrade, don't crash** — FAISS / Qdrant / OpenTelemetry / SentenceTransformers are lazily imported with working fallbacks; missing infra never hard-fails import.
+- **Degrade, don't crash — where a degraded answer is still an answer.** FAISS / Qdrant / OpenTelemetry / SentenceTransformers are lazily imported with working fallbacks, so a missing native library never breaks import. The LLM factory is the deliberate exception: `get_llm("auto")` raises rather than falling back to the mock backend, because a fabricated answer is worse than none.
 - **Measured, not asserted** — a retrieval eval gate, not just unit tests; packaged and CI-built end to end.
 
 ## Develop / test
