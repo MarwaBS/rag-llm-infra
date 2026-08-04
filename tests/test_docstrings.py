@@ -66,8 +66,11 @@ def test_every_import_shown_in_a_docstring_resolves(
 # cannot see; the CHANGELOG carries that.
 _HISTORY = re.compile(
     r"\b(?:the\s+)?(?:previous|earlier|old)\s+(?:version|code|implementation)\b"
-    r"|\bused\s+to\s+(?:raise|return|be|do|hold|build)\b"
-    r"|\bthe\s+engine(?:'s)?\b",
+    # "it used to raise" is narration; "is used to build" is present-tense
+    # description, so require the phrase not to follow a form of "to be".
+    r"|(?<!\bis )(?<!\bare )(?<!\bwas )(?<!\bwere )(?<!\bbe )(?<!\bbeen )"
+    r"\bused\s+to\s+(?:raise|return|be|do|hold|build)\b"
+    r"|\bthe\s+engine(?:'s)?\b(?!\s+room)",
     re.IGNORECASE,
 )
 
@@ -86,4 +89,17 @@ def test_the_history_matcher_is_not_vacuous() -> None:
     assert _HISTORY.search("# the previous version held one lock")
     assert _HISTORY.search("# FAISS used to raise a bare AssertionError")
     assert _HISTORY.search("# the engine's rule")
-    assert not _HISTORY.search("# normalize both sides before the matmul")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "# normalize both sides before the matmul",
+        "# retry the previous request after a backoff",
+        "# older entries are evicted first",
+        "# this is used to build the index",
+        "# argpartition is used to hold the top-k slice",
+    ],
+)
+def test_the_history_matcher_leaves_present_tense_prose_alone(line: str) -> None:
+    assert not _HISTORY.search(line)
