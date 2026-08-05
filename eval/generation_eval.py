@@ -1,26 +1,26 @@
 """Generation-quality (faithfulness) gate.
 
-Runs the retrieval step, then checks that the groundedness metric DISCRIMINATES a
-faithful answer (drawn from the evidence) from an independent hallucinated answer
-(plausible-sounding, but every claim absent from the evidence).
-
-The gate is two-sided: the faithful answer must score above a floor AND the
-hallucinated answer below a ceiling, with a minimum margin between them. It fails
-if the metric stops separating the two cases (a metric returning any constant
-trips either the ceiling or the floor), if retrieval regresses so the faithful
-answer is no longer supported, or if the margin collapses.
-
-The floor is the weak side: `FAITHFUL_ANSWER` is `DOCS[0]` verbatim, so it scores
-1.0 by identity and the floor cannot discriminate. The ceiling and the margin are
-what this gate rests on; `tests/test_faithfulness.py` is what holds the metric
-itself.
+Runs the retrieval step, then checks that the groundedness metric DISCRIMINATES
+answers labelled faithful (paraphrases of the evidence) from answers labelled
+hallucinated (fluent, on-topic, asserting what the evidence does not).
 
     python -m eval.generation_eval
+
+Both populations are scored, and the gate is held by the worst case in each: the
+lowest faithful score must clear the floor, the highest hallucinated score must
+stay under the ceiling, and the two must stay a minimum distance apart. Floors
+come from `eval/eval_floors.json`, derived by `scripts/derive_eval_floors.py`.
+
+No fixture sits at 0.0 or 1.0. A fixture at a theoretical extreme scores the same
+under a metric that discriminates and one that has stopped, so it cannot tell
+them apart — `tests/test_generation_eval.py` pins that property.
 """
 
 from __future__ import annotations
 
+import json
 import sys
+from pathlib import Path
 
 from rag_llm_infra import get_vector_store, groundedness
 from rag_llm_infra._demo import embed
@@ -32,24 +32,26 @@ DOCS: list[str] = [
 ]
 QUERY = "in-process vector similarity search"
 
-# A faithful answer: DOCS[0] verbatim, the unambiguous match for QUERY. See the
-# module docstring on why this makes the floor non-discriminating.
-FAITHFUL_ANSWER = (
-    "FAISS performs in-process vector similarity search with inner product."
-)
-# A hallucinated answer: fluent, on-topic-sounding, but every content word is
-# absent from the evidence. An honest metric must score this near zero.
-HALLUCINATED_ANSWER = (
-    "Bitcoin blockchain mining reached quantum supremacy to approve mortgage "
-    "applications via astrology and homeopathy."
-)
+FAITHFUL_ANSWERS: list[str] = [
+    "FAISS performs vector similarity search inside the process, ranking by inner product.",
+    "Vector similarity search runs in-process in FAISS, scored by inner product.",
+    "In-process similarity search over vectors is what FAISS performs, by inner product.",
+]
+HALLUCINATED_ANSWERS: list[str] = [
+    "FAISS uses quantum annealing hardware to accelerate similarity search.",
+    "The vector database Redis stores similarity search indexes on tape archives.",
+    "Qdrant search runs on a blockchain notary stamped quarterly by astrologers.",
+]
 
-GROUNDED_MIN = 0.90  # a faithful answer must be strongly supported
-HALLUCINATED_MAX = 0.34  # a hallucination must be clearly flagged as unsupported
-MARGIN_MIN = 0.50  # and the two must be well-separated
+_FLOORS = json.loads(
+    (Path(__file__).resolve().parent / "eval_floors.json").read_text(encoding="utf-8")
+)["generation"]["floors"]
+GROUNDED_MIN: float = _FLOORS["grounded_min"]
+HALLUCINATED_MAX: float = _FLOORS["hallucinated_max"]
+MARGIN_MIN: float = _FLOORS["margin_min"]
 
 
-def _retrieve(query: str, k: int = 2) -> list[str]:
+def retrieve(query: str, k: int = 2) -> list[str]:
     store = get_vector_store("numpy")
     store.add(embed(DOCS))
     _, idx = store.search(embed([query]), k=k)
@@ -57,9 +59,9 @@ def _retrieve(query: str, k: int = 2) -> list[str]:
 
 
 def evaluate() -> dict[str, float]:
-    contexts = _retrieve(QUERY)
-    grounded = groundedness(FAITHFUL_ANSWER, contexts)
-    hallucinated = groundedness(HALLUCINATED_ANSWER, contexts)
+    contexts = retrieve(QUERY)
+    grounded = min(groundedness(a, contexts) for a in FAITHFUL_ANSWERS)
+    hallucinated = max(groundedness(a, contexts) for a in HALLUCINATED_ANSWERS)
     return {
         "grounded": grounded,
         "hallucinated": hallucinated,
@@ -88,7 +90,7 @@ def main() -> int:
         print("FAIL: " + "; ".join(reasons))
         return 1
     print(
-        "PASS: faithful answer is supported and the hallucination is flagged below ceiling"
+        "PASS: every faithful answer clears the floor and every hallucination is flagged"
     )
     return 0
 
