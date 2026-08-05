@@ -205,7 +205,8 @@ def test_llm_call_reports_a_measured_latency(caplog) -> None:
     records = [r for r in caplog.records if r.message == "llm_call"]
     assert len(records) == 1
     reported = records[0].llm["latency_ms"]
-    assert slept_ms - 1.0 <= reported <= wall_ms, records[0].llm
+    # +0.05: the source rounds to 1 dp, so the reading can exceed its own reading.
+    assert slept_ms - 1.0 <= reported <= wall_ms + 0.05, records[0].llm
 
 
 def _emit(**extra):

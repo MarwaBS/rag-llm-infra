@@ -216,6 +216,22 @@
       "find": "    \"FAISS performs vector similarity search inside the process, ranking by inner product.\",",
       "replace": "    \"FAISS performs in-process vector similarity search with inner product.\",",
       "gates": ["pytest tests/test_generation_eval.py"]
+    },
+    {
+      "id": "M28",
+      "why": "a stop word leaves the list, so its token starts counting as a claim",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "        \"not\",\n",
+      "replace": "",
+      "gates": ["pytest tests/test_stop_words.py"]
+    },
+    {
+      "id": "M29",
+      "why": "a content word joins the stop list, so answers stop being graded on it",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "        \"the\",\n",
+      "replace": "        \"the\",\n        \"faiss\",\n",
+      "gates": ["pytest tests/test_stop_words.py"]
     }
   ]
 }

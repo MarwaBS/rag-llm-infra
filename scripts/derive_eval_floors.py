@@ -1,13 +1,16 @@
-"""Derive every eval floor from measurement and write `eval/eval_floors.json`.
+"""Compute every eval floor from a stated rule and write `eval/eval_floors.json`.
 
     python -m scripts.derive_eval_floors
 
-The gates read the artefact this writes, so no threshold in the repo is a number
-somebody picked. `tests/test_eval_floors.py` re-runs this and requires the output
-to be byte-identical to the committed file, so a fixture change that moves a
+The gates read the artefact this writes, so no threshold is edited where it is
+used. `tests/test_eval_floors.py` re-runs this and requires the output to be
+byte-identical to the committed file, so a fixture change that moves a
 measurement cannot leave a stale floor behind.
 
-Two rules produce the five numbers:
+Two rules produce the five numbers. The generation rule consumes the measured
+scores; the retrieval rule consumes only the query count and a chosen tolerance
+of one slipped rank, and the artefact records the measurements beside it so a
+regression still reddens the byte-identity test.
 
 generation — the decision boundary is the midpoint between the worst answer
 labelled faithful and the best one labelled hallucinated, and the gate demands at

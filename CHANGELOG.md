@@ -5,6 +5,38 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - unreleased
+
+Every gate on this release has been shown to go red. `tests/mutations.json`
+registers a defect per guard and `scripts/replay_mutations.py` applies each one
+in turn in CI; a guard that survives its own defect fails the build.
+
+### Fixed
+- **`OpenAIBackend.close()` closed nothing on the async client.** `AsyncOpenAI.close`
+  is a coroutine function, so calling it from a sync method discarded the
+  coroutine and left the httpx pool open. `close()` now handles the sync client
+  only and **`aclose()` is added** for the async one.
+- **The generation gate could not fail.** Its faithful fixture was a retrieved
+  document verbatim, scoring `1.000` by set identity whatever the metric did.
+  Both sides are now populations of paraphrases and of fluent unsupported
+  answers, scored by the worst case in each, and a test forbids any fixture
+  lifted from its own evidence.
+- **No eval floor is edited where it is used.** `scripts/derive_eval_floors.py`
+  measures the labelled populations and writes `eval/eval_floors.json`, which
+  both gates read; re-running the producer must reproduce it byte for byte. It
+  refuses to derive at all unless the metric separates the two populations.
+- **`groundedness` is pinned to exact fractions** taken from its written
+  definition rather than to `0 < score < 1`, which a metric that has stopped
+  reading the evidence also satisfies.
+
+### Changed
+- `requires-python` is bounded at both ends (`>=3.12,<3.14`) and CI runs both
+  legs it admits.
+- Documentation states what the code does: the shipped unauthenticated server,
+  what the log formatter does not redact, and that importing
+  `rag_llm_infra.serve` configures neither logging nor tracing (pinned by a
+  subprocess probe with seven positive controls).
+
 ## [0.1.2] - 2026-07-04
 
 Hardening release. Each behavioral fix carries a regression test.
@@ -78,10 +110,9 @@ Hardening release. Each behavioral fix carries a regression test.
   proving the `VectorStoreProtocol` swap path end-to-end with batched search.
 - Two-sided faithfulness eval gate: an absolute ceiling on the hallucinated
   control, and the margin requirement raised from merely positive to `0.50`,
-  alongside the existing floor on the faithful answer. That faithful answer is
-  a retrieved document verbatim, so it scores `1.000` by identity and the floor
-  is not load-bearing; `tests/test_faithfulness.py`, not this gate, is what
-  holds the metric.
+  alongside the existing floor on the faithful answer. Both fixtures were single
+  answers and the faithful one was a retrieved document verbatim. See 0.1.3 for
+  what replaced them.
 - Budget-aware `FallbackLLM` with a permanent budget-exhaustion trip.
 
 ### Fixed

@@ -74,10 +74,12 @@ python -m eval.generation_eval     # groundedness (faithfulness) of generated an
 ```
 
 Both run in CI: a **retrieval** regression or a **faithfulness** regression fails
-the build and cannot merge. Neither gate carries a hand-picked threshold — every
-floor is derived by `scripts/derive_eval_floors.py` into `eval/eval_floors.json`,
-which records the rule beside the measurement it came from, and a test requires
-re-running the producer to reproduce that file byte for byte.
+the build and cannot merge. No floor is edited where it is used: every one is
+computed by `scripts/derive_eval_floors.py` into `eval/eval_floors.json`, which
+records the rule beside the measurement it came from, and a test requires
+re-running the producer to reproduce that file byte for byte. The generation
+floors come from the measured scores; the retrieval floors come from the query
+count and a stated tolerance of one slipped rank.
 
 `groundedness` is a **cheap lexical tripwire, not a faithfulness guarantee** — it
 scores token overlap, so by construction it is negation-blind ("X is not Y" looks
