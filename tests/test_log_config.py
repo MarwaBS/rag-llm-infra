@@ -186,14 +186,20 @@ class TestLlmCall:
 
 def test_llm_call_reports_a_measured_latency(caplog) -> None:
     """Line coverage of the timer is not assertion coverage: a constant would be
-    just as covered. Pin that the number tracks how long the body actually took."""
+    just as covered. Bound the reported number on both sides against a clock this
+    test owns — a lower bound alone accepts any number large enough."""
     import time as _time
 
     from rag_llm_infra.log_config import llm_call
 
+    slept_ms = 50.0
+    started = _time.perf_counter()
     with caplog.at_level(logging.INFO, logger="llm"):
         with llm_call("probe"):
-            _time.sleep(0.05)
+            _time.sleep(slept_ms / 1000)
+    wall_ms = (_time.perf_counter() - started) * 1000
+
     records = [r for r in caplog.records if r.message == "llm_call"]
     assert len(records) == 1
-    assert records[0].llm["latency_ms"] >= 40.0, records[0].llm
+    reported = records[0].llm["latency_ms"]
+    assert 0.8 * slept_ms <= reported <= wall_ms, records[0].llm

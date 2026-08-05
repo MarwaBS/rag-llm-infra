@@ -11,6 +11,7 @@ These tests are hermetic.
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -290,12 +291,46 @@ class TestOpenAIBackendClientLifecycle:
             assert llm.aclient is fake_openai.AsyncOpenAI.return_value
             assert llm.aclient is llm._aclient  # built once, then reused
 
-    def test_close_closes_only_the_clients_that_were_built(self) -> None:
+    def test_close_closes_the_sync_client_and_leaves_the_async_one_alone(self) -> None:
+        """The real `AsyncOpenAI.close` is a coroutine function, so calling it
+        from a sync method builds a coroutine nobody awaits and closes nothing.
+        Asserting it was never even called is what makes that shape red — an
+        assertion about awaiting passes under it, since it never awaits."""
         fake_openai = MagicMock()
         fake_openai.__version__ = "1.109.1"
         with patch.dict("sys.modules", {"openai": fake_openai}):
             llm = OpenAIBackend()
-            built = llm.aclient
+            sync = llm.client
+            llm._aclient = AsyncMock()
             llm.close()
-            built.close.assert_called_once()
-            fake_openai.OpenAI.return_value.close.assert_not_called()
+            sync.close.assert_called_once()
+            llm._aclient.close.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_aclose_awaits_the_async_client(self) -> None:
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            llm._aclient = AsyncMock()
+            await llm.aclose()
+            llm._aclient.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_closing_a_backend_that_built_nothing_is_a_no_op(self) -> None:
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            llm.close()
+            await llm.aclose()
+            fake_openai.OpenAI.assert_not_called()
+            fake_openai.AsyncOpenAI.assert_not_called()
+
+    def test_the_sdk_still_makes_only_the_async_close_a_coroutine(self) -> None:
+        """The split above exists because of this asymmetry in the installed
+        SDK. If it ever goes away, the split is the thing to revisit."""
+        import openai
+
+        assert not inspect.iscoroutinefunction(openai.OpenAI.close)
+        assert inspect.iscoroutinefunction(openai.AsyncOpenAI.close)

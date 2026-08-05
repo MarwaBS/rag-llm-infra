@@ -122,14 +122,16 @@ class OpenAIBackend:
         return cast(str, resp.choices[0].message.content or "")
 
     def close(self) -> None:
-        """Close whichever SDK clients were created (best-effort)."""
-        for client in (self._client, self._aclient):
-            close = getattr(client, "close", None)
-            if close is not None:
-                try:
-                    close()
-                except Exception:  # pragma: no cover - defensive
-                    pass
+        """Close the sync client if one was built. The async client needs
+        `aclose()`: `AsyncOpenAI.close` is a coroutine function, so calling it
+        from here would discard the coroutine and close nothing."""
+        if self._client is not None:
+            self._client.close()
+
+    async def aclose(self) -> None:
+        """Close the async client if one was built."""
+        if self._aclient is not None:
+            await self._aclient.close()
 
 
 # ---------------------------------------------------------------------------
