@@ -1,0 +1,101 @@
+{
+  "description": "Defects that must not ship. scripts/replay_mutations.py applies each one, runs its gates, and restores the file; every entry must turn at least one gate red. tests/test_mutation_registry.py keeps the anchors from going stale.",
+  "mutations": [
+    {
+      "id": "M1",
+      "why": "a docstring quotes a name the package does not export",
+      "file": "src/rag_llm_infra/tracing.py",
+      "find": "    from rag_llm_infra import configure_tracing",
+      "replace": "    from rag_llm_infra import configure_tracingg",
+      "gates": ["pytest tests/test_docstrings.py"]
+    },
+    {
+      "id": "M2",
+      "why": "a docstring quotes a submodule that does not exist",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "    from rag_llm_infra import configure_logging",
+      "replace": "    import rag_llm_infra.no_such_module",
+      "gates": ["pytest tests/test_docstrings.py"]
+    },
+    {
+      "id": "M3",
+      "why": "importing the serving layer configures logging for the whole process",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "_index: _Index | None = None",
+      "replace": "_index: _Index | None = None\n\nfrom . import log_config as _lc\n\n_lc.configure_logging()",
+      "gates": ["pytest tests/test_serve_posture.py"]
+    },
+    {
+      "id": "M4",
+      "why": "serving a request installs a tracer provider process-wide",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "def health() -> dict[str, str]:",
+      "replace": "def health() -> dict[str, str]:\n    from . import tracing as _tr\n\n    getattr(_tr, \"configure_tracing\")()",
+      "gates": ["pytest tests/test_serve_posture.py"]
+    },
+    {
+      "id": "M5",
+      "why": "the library calls basicConfig, taking the root logger from its caller",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "_index: _Index | None = None",
+      "replace": "_index: _Index | None = None\n\nimport logging as _lg\n\n_lg.basicConfig(level=_lg.INFO)",
+      "gates": ["pytest tests/test_serve_posture.py"]
+    },
+    {
+      "id": "M6",
+      "why": "the reader-writer lock loses writer preference, so writers starve",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "            while self._writer or self._writers_waiting > 0:",
+      "replace": "            while self._writer:",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M7",
+      "why": "the groundedness metric stops flagging anything below 0.33",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "    return len(claim & support) / len(claim)",
+      "replace": "    return min(1.0, len(claim & support) / len(claim) + 0.33)",
+      "gates": ["python -m eval.generation_eval", "pytest tests/test_faithfulness.py"]
+    },
+    {
+      "id": "M8",
+      "why": "/query stops filtering the sentinel index a backend pads a short row with",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "retrieved = [docs[int(i)] for i in idx[0] if i >= 0]",
+      "replace": "retrieved = [docs[int(i)] for i in idx[0]]",
+      "gates": ["pytest tests/test_serve.py"]
+    },
+    {
+      "id": "M9",
+      "why": "the served API version stops tracking the package version",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "app = FastAPI(title=\"rag-llm-infra\", version=__version__)",
+      "replace": "app = FastAPI(title=\"rag-llm-infra\", version=\"0.1.0\")",
+      "gates": ["pytest tests/test_serve.py"]
+    },
+    {
+      "id": "M10",
+      "why": "llm_call reports a constant instead of a measured latency",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "        ctx[\"latency_ms\"] = round((time.perf_counter() - start) * 1000, 1)",
+      "replace": "        ctx[\"latency_ms\"] = 0.0",
+      "gates": ["pytest tests/test_log_config.py"]
+    },
+    {
+      "id": "M11",
+      "why": "an eval floor is edited by hand instead of re-derived",
+      "file": "eval/eval_floors.json",
+      "find": "\"grounded_min\": 0.611",
+      "replace": "\"grounded_min\": 0.5",
+      "gates": ["pytest tests/test_eval_floors.py"]
+    },
+    {
+      "id": "M12",
+      "why": "a generation fixture is lifted from its own evidence, scoring 1.0 by identity",
+      "file": "eval/generation_eval.py",
+      "find": "    \"FAISS performs vector similarity search inside the process, ranking by inner product.\",",
+      "replace": "    \"FAISS performs in-process vector similarity search with inner product.\",",
+      "gates": ["pytest tests/test_generation_eval.py"]
+    }
+  ]
+}

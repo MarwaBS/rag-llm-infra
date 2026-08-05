@@ -57,3 +57,8 @@ jobs:
 
       - name: Run end-to-end example
         run: python example.py
+
+      # Green above says the suite passes; this says the suite can fail. Each
+      # registered defect is applied in turn and must turn a gate red.
+      - name: Replay the mutation registry
+        run: python -m scripts.replay_mutations
