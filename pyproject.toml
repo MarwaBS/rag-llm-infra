@@ -69,8 +69,8 @@ ignore = ["E402", "E501", "E701", "E741"]
 [tool.pytest.ini_options]
 # A test that blocks gets a verdict instead of stalling the job. It does not
 # cover a hang AFTER the last test: the timer is armed per test, so a leaked
-# non-daemon thread still blocks interpreter shutdown. Tests that start threads
-# own that themselves, with daemon=True and bounded joins.
+# non-daemon thread still blocks interpreter shutdown, which is why the
+# starvation test runs its threads as daemons and joins them with a timeout.
 addopts = "-ra --import-mode=importlib --timeout=60"
 asyncio_mode = "auto"
 pythonpath = ["src", "."]

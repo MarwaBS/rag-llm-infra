@@ -374,3 +374,27 @@ class TestMemoryPressureTrim:
         eng.embed_batch(["one"])  # past the throttle -> polls psutil once
         eng.embed_batch(["two"])  # within 30s of the (quiet) check -> no poll
         assert calls["n"] == 1
+
+
+class TestCacheKeyIdentity:
+    """What the cache key must keep apart, and what it must fold together."""
+
+    def test_the_same_text_in_two_namespaces_is_two_entries(self):
+        from rag_llm_infra.evidence_index import EmbeddingEngine
+
+        fake = _FakeEmbedder()
+        eng = EmbeddingEngine(model=fake)
+        eng.embed_batch(["shared text"], namespace="one")
+        eng.embed_batch(["shared text"], namespace="two")
+        assert fake.total_encoded == 2
+        assert eng.get_stats()["cache_size"] == 2
+
+    def test_two_spellings_that_nfkc_folds_together_share_one_entry(self):
+        from rag_llm_infra.evidence_index import EmbeddingEngine
+
+        fake = _FakeEmbedder()
+        eng = EmbeddingEngine(model=fake)
+        eng.embed_batch(["\ufb01le"])  # the ligature form
+        eng.embed_batch(["file"])
+        assert fake.total_encoded == 1
+        assert eng.get_stats()["cache_size"] == 1

@@ -145,3 +145,12 @@ async def test_an_exhausted_backend_is_never_awaited_again() -> None:
     for _ in range(5):
         await llm.ainvoke([])
     assert primary.calls == 1
+
+
+def test_any_provider_exception_falls_through_by_default() -> None:
+    """`retry_on` defaults to Exception so an unforeseen provider error still
+    reaches the next backend. Narrowing it turns one into a hard failure."""
+    llm = FallbackLLM(
+        [_Boom(ValueError("provider said no")), MockBackend(response="ok")]
+    )
+    assert llm.invoke([]) == "ok"

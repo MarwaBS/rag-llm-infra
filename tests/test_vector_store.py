@@ -165,3 +165,21 @@ class TestContractAcrossBackends:
         store.add(_orthonormal_corpus())  # dim 3
         with pytest.raises(ValueError, match="dim"):
             store.search(np.ones((1, 5), dtype="float32"), k=1)
+
+
+class TestNumpyNormalisationInvariants:
+    """The two normalisations behind the documented score range."""
+
+    def test_a_zero_vector_does_not_poison_the_index(self) -> None:
+        store = NumpyVectorStore()
+        store.add(np.array([[1.0, 0.0], [0.0, 0.0]], dtype="float32"))
+        scores, _ = store.search(np.array([[1.0, 0.0]], dtype="float32"), k=2)
+        assert not np.isnan(scores).any(), scores
+
+    def test_an_unnormalised_query_still_scores_inside_the_documented_range(
+        self,
+    ) -> None:
+        store = NumpyVectorStore()
+        store.add(np.array([[1.0, 0.0], [0.0, 1.0]], dtype="float32"))
+        scores, _ = store.search(np.array([[10.0, 0.0]], dtype="float32"), k=2)
+        assert scores.max() <= 1.0 and scores.min() >= -1.0, scores

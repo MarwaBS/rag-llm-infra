@@ -49,6 +49,6 @@
       "n": 6,
       "recall@1": 1.0
     },
-    "rule": "floor = the score when exactly one of n queries slips one rank, floored to 3dp; a worse slip or a second one falls below it"
+    "rule": "floor = the score when exactly one of n queries slips one rank, floored to 3dp. mrr rejects a worse slip or a second regression; recall@1 counts rank 1 only, so it rejects a second one"
   }
 }

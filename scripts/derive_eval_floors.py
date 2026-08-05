@@ -13,8 +13,10 @@ generation — the decision boundary is the midpoint between the worst answer
 labelled faithful and the best one labelled hallucinated, and the gate demands at
 least half the separation the fixture population actually exhibits.
 
-retrieval — exactly one of the n queries may regress: the floor is (n-1)/n, so
-one failure passes and two fail.
+retrieval — each floor is the score when exactly one of the n queries slips one
+rank. recall@1 counts only rank 1, so it sees a slip and a drop-out alike; MRR
+gets its own floor because it is at least recall@1 for every ranking, and sharing
+recall's number would leave it unable to reject anything recall had not already.
 """
 
 from __future__ import annotations
@@ -90,7 +92,8 @@ def _retrieval() -> dict[str, Any]:
     return {
         "rule": (
             "floor = the score when exactly one of n queries slips one rank, "
-            "floored to 3dp; a worse slip or a second one falls below it"
+            "floored to 3dp. mrr rejects a worse slip or a second regression; "
+            "recall@1 counts rank 1 only, so it rejects a second one"
         ),
         "measured": {"n": n, **{k: round(v, 4) for k, v in measured.items()}},
         "floors": {

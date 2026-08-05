@@ -1,51 +1,61 @@
-"""Unit tests for the groundedness (faithfulness) metric."""
+"""The groundedness metric, pinned to exact values taken from its definition.
+
+`groundedness` is the fraction of the answer's content tokens present in the
+union of the contexts — a content token being a lowercase `[a-z0-9]+` run of at
+least two characters that is not a stop word — and 1.0 for an answer with none.
+
+Every expectation below is that fraction worked out from the definition, not
+read off a run. `0 < score < 1` is satisfied by metrics that have stopped reading
+the evidence at all; two such survived this file before it was exact.
+"""
+
+from fractions import Fraction
+
+import pytest
 
 from rag_llm_infra import groundedness
 
-
-def test_fully_grounded_answer_scores_one() -> None:
-    ctx = ["FAISS performs vector similarity search"]
-    assert groundedness("vector similarity search", ctx) == 1.0
-
-
-def test_off_context_claim_lowers_score() -> None:
-    ctx = ["FAISS performs vector similarity search"]
-    score = groundedness("vector similarity search using bitcoin quantum", ctx)
-    assert 0.0 < score < 1.0
-
-
-def test_empty_answer_is_trivially_grounded() -> None:
-    assert groundedness("", ["anything"]) == 1.0
-
-
-def test_claims_with_no_context_score_zero() -> None:
-    assert groundedness("unsupported novel claim", []) == 0.0
-
-
-def test_result_is_bounded() -> None:
-    s = groundedness("some partially supported vector claim", ["vector store"])
-    assert 0.0 <= s <= 1.0
-
-
-def test_two_char_acronyms_are_groundable() -> None:
-    # Regression: len > 2 dropped US/AI/ML, so an answer made only of acronyms had
-    # zero content tokens and scored a vacuous 1.0 regardless of the evidence. With
-    # len >= 2 the acronyms are scored: supported -> 1.0, unsupported -> < 1.0.
-    assert groundedness("AI ML", ["the AI and ML pipeline"]) == 1.0
-    assert groundedness("AI ML", ["the cooking recipe"]) == 0.0
+# (answer, contexts, expected) — expected = |content(answer) & support| / |content(answer)|
+CASES: list[tuple[str, list[str], Fraction]] = [
+    # whole tokens, not prefixes
+    ("process product", ["the processor handles products"], Fraction(0)),
+    # every context is evidence, not just the first
+    ("gamma delta", ["alpha beta", "gamma delta"], Fraction(1)),
+    # digits carry claims
+    ("the model has 40 layers", ["the model has 12 layers"], Fraction(3, 4)),
+    # stop words are not claims
+    ("the vector is on the search", ["vector search"], Fraction(1)),
+    # two characters are content, one is not
+    ("AI ML", ["the AI and ML pipeline"], Fraction(1)),
+    ("AI ML", ["the cooking recipe"], Fraction(0)),
+    ("a b c", ["nothing in common here"], Fraction(1)),
+    ("", ["anything"], Fraction(1)),
+    ("the a an of", ["anything"], Fraction(1)),
+    ("unsupported novel claim", [], Fraction(0)),
+    # the documented blind spots, as numbers
+    ("Paris is not the capital", ["Paris is the capital."], Fraction(1)),
+    (
+        "The Eiffel Tower is a wrought iron lattice tower in Paris and on Mars",
+        ["The Eiffel Tower is a wrought iron lattice tower located in Paris."],
+        Fraction(6, 7),
+    ),
+]
 
 
-def test_known_blind_spots_are_documented_not_hidden() -> None:
-    # These assert the LIMITATIONS the docstring is honest about, so the metric's
-    # behaviour can't silently change without this test noticing. A lexical
-    # bag-of-words proxy cannot catch negation or dilution; do not let a future
-    # edit quietly claim it can.
-    # Negation-blind: flipping polarity does not change the token overlap.
-    assert groundedness("Paris is not the capital", ["Paris is the capital."]) == 1.0
-    # Dilution: a fabricated clause appended to a well-supported answer only dents
-    # the score (one false token out of many true ones), it does not sink it.
-    ctx = ["The Eiffel Tower is a wrought iron lattice tower located in Paris."]
-    diluted = groundedness(
-        "The Eiffel Tower is a wrought iron lattice tower in Paris and on Mars", ctx
-    )
-    assert diluted > 0.8  # 6 of 7 content tokens grounded; only "mars" is false
+@pytest.mark.parametrize("answer,contexts,expected", CASES)
+def test_groundedness_equals_the_fraction_its_definition_gives(
+    answer: str, contexts: list[str], expected: Fraction
+) -> None:
+    assert groundedness(answer, contexts) == pytest.approx(float(expected))
+
+
+def test_every_case_is_bounded() -> None:
+    for answer, contexts, _ in CASES:
+        assert 0.0 <= groundedness(answer, contexts) <= 1.0
+
+
+def test_the_table_covers_both_extremes_and_the_interior() -> None:
+    # A table of only 0s and 1s cannot detect a metric that has stopped grading.
+    values = {expected for _, _, expected in CASES}
+    assert {Fraction(0), Fraction(1)} <= values
+    assert any(0 < v < 1 for v in values)

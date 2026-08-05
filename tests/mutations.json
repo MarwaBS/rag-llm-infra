@@ -122,6 +122,94 @@
       "gates": ["pytest tests/test_llm_protocol.py"]
     },
     {
+      "id": "M17",
+      "why": "groundedness counts a claim token as supported on a 3-character prefix match",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "    return len(claim & support) / len(claim)",
+      "replace": "    support |= {t for t in claim if any(s[:3] == t[:3] for s in support)}\n    return len(claim & support) / len(claim)",
+      "gates": ["pytest tests/test_faithfulness.py"]
+    },
+    {
+      "id": "M18",
+      "why": "only the first retrieved context counts as evidence",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "    for context in contexts:",
+      "replace": "    for context in contexts[:1]:",
+      "gates": ["pytest tests/test_faithfulness.py"]
+    },
+    {
+      "id": "M19",
+      "why": "digits stop being content, so a wrong number reads as grounded",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "for t in re.findall(r\"[a-z0-9]+\", text.lower())",
+      "replace": "for t in re.findall(r\"[a-z]+\", text.lower())",
+      "gates": ["pytest tests/test_faithfulness.py"]
+    },
+    {
+      "id": "M20",
+      "why": "a zero-length vector poisons every score in the index with NaN",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)\n        norms[norms == 0] = 1.0\n        self._matrix = embeddings / norms",
+      "replace": "        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)\n        self._matrix = embeddings / norms",
+      "gates": ["pytest tests/test_vector_store.py"]
+    },
+    {
+      "id": "M21",
+      "why": "an unnormalised query scores outside the [-1,1] the protocol promises",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        q_norms = np.linalg.norm(queries, axis=1, keepdims=True)\n        q_norms[q_norms == 0] = 1.0\n        norm_queries = queries / q_norms",
+      "replace": "        norm_queries = queries",
+      "gates": ["pytest tests/test_vector_store.py"]
+    },
+    {
+      "id": "M22",
+      "why": "the cache key drops the namespace, so two namespaces share one vector",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "        raw_key = f\"{namespace}:{normalized}\"",
+      "replace": "        raw_key = f\"{normalized}\"",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M23",
+      "why": "the cache key skips NFKC, so two spellings of one text encode twice",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "        normalized = unicodedata.normalize(\"NFKC\", text)",
+      "replace": "        normalized = text",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M24",
+      "why": "the fallback stops treating an unforeseen provider error as transient",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        retry_on: tuple[type[BaseException], ...] = (Exception,),",
+      "replace": "        retry_on: tuple[type[BaseException], ...] = (RuntimeError,),",
+      "gates": ["pytest tests/test_fallback.py"]
+    },
+    {
+      "id": "M25",
+      "why": "the log formatter stops dropping leading-underscore fields",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "            if key.startswith(\"_\") or key in {",
+      "replace": "            if key in {",
+      "gates": ["pytest tests/test_log_config.py"]
+    },
+    {
+      "id": "M26",
+      "why": "the formatter forwards the record's own machinery as if it were caller data",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "                \"message\",\n                \"asctime\",",
+      "replace": "                \"placeholder-that-is-not-a-record-attribute\",",
+      "gates": ["pytest tests/test_log_config.py"]
+    },
+    {
+      "id": "M27",
+      "why": "a failed llm_call is logged at INFO, so an error stops standing out",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "        level = logging.WARNING if ctx.get(\"status\") == \"error\" else logging.INFO",
+      "replace": "        level = logging.INFO",
+      "gates": ["pytest tests/test_log_config.py"]
+    },
+    {
       "id": "M12",
       "why": "a generation fixture is lifted from its own evidence, scoring 1.0 by identity",
       "file": "eval/generation_eval.py",

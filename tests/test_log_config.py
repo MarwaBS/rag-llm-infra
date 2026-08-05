@@ -1,5 +1,6 @@
 """Tests for log_config.py — structured logging and llm_call context manager."""
 
+import contextlib
 import json
 import logging
 from unittest.mock import patch
@@ -185,9 +186,11 @@ class TestLlmCall:
 
 
 def test_llm_call_reports_a_measured_latency(caplog) -> None:
-    """Line coverage of the timer is not assertion coverage: a constant would be
-    just as covered. Bound the reported number on both sides against a clock this
-    test owns — a lower bound alone accepts any number large enough."""
+    """Line coverage of the timer is not assertion coverage: a constant is just
+    as covered. The body cannot take less than it slept or more than the wall
+    clock around it, and both of those are measured here rather than chosen —
+    which leaves a constant and a scaled reading nowhere to sit. The 1 ms is
+    clock granularity, not slack."""
     import time as _time
 
     from rag_llm_infra.log_config import llm_call
@@ -202,4 +205,51 @@ def test_llm_call_reports_a_measured_latency(caplog) -> None:
     records = [r for r in caplog.records if r.message == "llm_call"]
     assert len(records) == 1
     reported = records[0].llm["latency_ms"]
-    assert 0.8 * slept_ms <= reported <= wall_ms, records[0].llm
+    assert slept_ms - 1.0 <= reported <= wall_ms, records[0].llm
+
+
+def _emit(**extra):
+    """Format one record through the JSON formatter and return the payload."""
+    from rag_llm_infra.log_config import _JsonFormatter
+
+    record = logging.LogRecord("t", logging.INFO, "p", 1, "hello", None, None)
+    for key, value in extra.items():
+        setattr(record, key, value)
+    return json.loads(_JsonFormatter().format(record))
+
+
+def test_underscore_prefixed_fields_stay_out_of_the_log_line() -> None:
+    """SECURITY.md tells callers that leading-underscore names are the ones the
+    formatter drops. That sentence is only true while this holds."""
+    payload = _emit(_internal="secret", visible="fine")
+    assert "_internal" not in payload
+    assert payload["visible"] == "fine"
+
+
+def test_the_records_own_machinery_stays_out_of_the_log_line() -> None:
+    """`message` and `asctime` are not attributes of a fresh record — a standard
+    formatter stamps them on. A record that reached a second handler first
+    carries them, and forwarding them would duplicate the message and the
+    timestamp under a second name."""
+    from rag_llm_infra.log_config import _JsonFormatter
+
+    record = logging.LogRecord("t", logging.INFO, "p", 1, "hello", None, None)
+    logging.Formatter("%(asctime)s %(message)s").format(record)
+    assert hasattr(record, "message") and hasattr(record, "asctime")
+
+    payload = json.loads(_JsonFormatter().format(record))
+    assert "message" not in payload
+    assert "asctime" not in payload
+    assert payload["msg"] == "hello"
+
+
+def test_a_failed_llm_call_is_logged_above_info(caplog) -> None:
+    from rag_llm_infra.log_config import llm_call
+
+    with caplog.at_level(logging.INFO, logger="llm"):
+        with contextlib.suppress(RuntimeError):
+            with llm_call("probe"):
+                raise RuntimeError("provider down")
+    record = next(r for r in caplog.records if r.message == "llm_call")
+    assert record.levelno > logging.INFO
+    assert record.llm["status"] == "error"
