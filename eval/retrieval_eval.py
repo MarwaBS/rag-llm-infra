@@ -21,7 +21,9 @@ set and the real embedder.
 
 from __future__ import annotations
 
+import json
 import sys
+from pathlib import Path
 
 from rag_llm_infra import get_vector_store
 from rag_llm_infra._demo import embed
@@ -45,7 +47,10 @@ QUERIES: list[tuple[str, int]] = [
     ("in memory key value store with ttl and atomic counters", 4),
     ("scraping time series metrics from instrumented services", 5),
 ]
-THRESHOLDS: dict[str, float] = {"recall@1": 0.80, "mrr": 0.85}
+# Floors come from the artefact `scripts/derive_eval_floors.py` writes.
+THRESHOLDS: dict[str, float] = json.loads(
+    (Path(__file__).resolve().parent / "eval_floors.json").read_text(encoding="utf-8")
+)["retrieval"]["floors"]
 
 
 def evaluate(k: int = 3) -> dict[str, float]:
