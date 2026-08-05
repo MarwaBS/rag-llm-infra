@@ -90,6 +90,38 @@
       "gates": ["pytest tests/test_eval_floors.py"]
     },
     {
+      "id": "M13",
+      "why": "the fallback retries a backend whose budget is already exhausted",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        for i in range(self._active, len(self._backends)):\n            try:\n                return self._backends[i].invoke(messages, **kwargs)",
+      "replace": "        for i in range(0, len(self._backends)):\n            try:\n                return self._backends[i].invoke(messages, **kwargs)",
+      "gates": ["pytest tests/test_fallback.py"]
+    },
+    {
+      "id": "M14",
+      "why": "the same, on the async path",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        for i in range(self._active, len(self._backends)):\n            try:\n                return await self._backends[i].ainvoke(messages, **kwargs)",
+      "replace": "        for i in range(0, len(self._backends)):\n            try:\n                return await self._backends[i].ainvoke(messages, **kwargs)",
+      "gates": ["pytest tests/test_fallback.py"]
+    },
+    {
+      "id": "M15",
+      "why": "the embedding cache evicts its newest entry instead of its oldest",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "                while len(self._cache) > self._max_cache_size:\n                    self._cache.popitem(last=False)",
+      "replace": "                while len(self._cache) > self._max_cache_size:\n                    self._cache.popitem(last=True)",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M16",
+      "why": "close() reaches for the async client, whose close is a coroutine nobody awaits",
+      "file": "src/rag_llm_infra/llm_protocol.py",
+      "find": "        if self._client is not None:\n            self._client.close()",
+      "replace": "        for c in (self._client, self._aclient):\n            if c is not None:\n                c.close()",
+      "gates": ["pytest tests/test_llm_protocol.py"]
+    },
+    {
       "id": "M12",
       "why": "a generation fixture is lifted from its own evidence, scoring 1.0 by identity",
       "file": "eval/generation_eval.py",

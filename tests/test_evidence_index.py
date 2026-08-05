@@ -231,6 +231,23 @@ class TestEmbeddingEngine:
         eng.embed_batch([f"text number {i}" for i in range(10)])
         assert eng.get_stats()["cache_size"] <= 3
 
+    def test_the_cap_evicts_the_oldest_entry_not_the_newest(self):
+        """Size alone is the same either way round. Which entry survives is what
+        separates insertion-order eviction from its opposite, and a fresh encode
+        is how a caller can tell the difference."""
+        from rag_llm_infra.evidence_index import EmbeddingEngine
+
+        fake = _FakeEmbedder()
+        eng = EmbeddingEngine(model=fake)
+        eng._max_cache_size = 3
+        eng.embed_batch([f"text number {i}" for i in range(4)])
+
+        encoded = fake.total_encoded
+        eng.embed_batch(["text number 3"])  # newest -> cached, no encode
+        assert fake.total_encoded == encoded
+        eng.embed_batch(["text number 0"])  # oldest -> evicted, re-encoded
+        assert fake.total_encoded == encoded + 1
+
     def test_stats_shape(self):
         eng = _engine()
         eng.embed_batch(["a", "b"])

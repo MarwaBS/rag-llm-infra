@@ -44,13 +44,18 @@ def main() -> int:
     for entry in registry:
         path = REPO / entry["file"]
         original = path.read_bytes()
-        text = original.decode("utf-8")
+        # Universal newlines, so an anchor spanning lines matches the same way
+        # here as in tests/test_mutation_registry.py on a CRLF checkout. The
+        # file is restored from its original bytes either way.
+        text = path.read_text(encoding="utf-8")
         if text.count(entry["find"]) != 1:
             print(f"{entry['id']}: anchor is not unique in {entry['file']} — stale")
             return 2
         try:
-            path.write_bytes(
-                text.replace(entry["find"], entry["replace"], 1).encode("utf-8")
+            path.write_text(
+                text.replace(entry["find"], entry["replace"], 1),
+                encoding="utf-8",
+                newline="\n",
             )
             caught = next((g for g in entry["gates"] if not _run(g)), None)
         finally:

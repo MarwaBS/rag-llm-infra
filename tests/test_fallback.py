@@ -106,3 +106,42 @@ async def test_async_all_backends_failing_raises_with_the_last_cause() -> None:
     with pytest.raises(RuntimeError, match="all 2 backends failed") as exc:
         await llm.ainvoke([])
     assert str(exc.value.__cause__) == "last"
+
+
+class _Counting:
+    """Backend that records how many times it was asked."""
+
+    backend_name = "counting"
+    backend_version = "0"
+
+    def __init__(self, exc: BaseException | None = None) -> None:
+        self._exc = exc
+        self.calls = 0
+
+    def invoke(self, messages, **kwargs):
+        self.calls += 1
+        if self._exc:
+            raise self._exc
+        return "ok"
+
+    async def ainvoke(self, messages, **kwargs):
+        return self.invoke(messages, **kwargs)
+
+
+def test_an_exhausted_backend_is_never_asked_again() -> None:
+    """`active_index` advancing is the mechanism; not calling the dead backend
+    again is the behaviour. Only the second one survives a rewrite of the first."""
+    primary = _Counting(BudgetExhausted("ceiling"))
+    llm = FallbackLLM([primary, MockBackend(response="secondary")])
+    for _ in range(5):
+        llm.invoke([])
+    assert primary.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_an_exhausted_backend_is_never_awaited_again() -> None:
+    primary = _Counting(BudgetExhausted("ceiling"))
+    llm = FallbackLLM([primary, MockBackend(response="secondary")])
+    for _ in range(5):
+        await llm.ainvoke([])
+    assert primary.calls == 1

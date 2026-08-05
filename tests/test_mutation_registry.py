@@ -6,6 +6,7 @@ silently: an anchor that no longer matches makes an entry unappliable, and a
 registry of unappliable entries replays green while testing nothing.
 """
 
+import ast
 import json
 from pathlib import Path
 
@@ -35,3 +36,17 @@ def test_the_anchor_matches_exactly_once_and_the_mutation_changes_something(
     assert entry["replace"] != entry["find"]
     assert entry["gates"]
     assert entry["why"].strip()
+
+
+@pytest.mark.parametrize("entry", REGISTRY, ids=lambda e: e["id"])
+def test_the_mutated_file_still_parses(entry: dict) -> None:
+    """The replay decides on exit code, so a mutation that does not parse looks
+    caught while testing nothing. Every entry must produce runnable code."""
+    path = REPO / entry["file"]
+    mutated = path.read_text(encoding="utf-8").replace(
+        entry["find"], entry["replace"], 1
+    )
+    if path.suffix == ".py":
+        ast.parse(mutated)
+    elif path.suffix == ".json":
+        json.loads(mutated)
