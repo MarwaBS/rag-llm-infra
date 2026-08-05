@@ -88,3 +88,21 @@ async def test_async_programming_error_propagates() -> None:
     llm = FallbackLLM([_Boom(KeyError("missing")), MockBackend(response="masked")])
     with pytest.raises(KeyError):
         await llm.ainvoke([])
+
+
+@pytest.mark.asyncio
+async def test_async_budget_exhausted_advances_permanently() -> None:
+    """The trip must be permanent on the async path too, not just the sync one."""
+    primary = _Boom(BudgetExhausted("daily ceiling hit"))
+    llm = FallbackLLM([primary, MockBackend(response="secondary")])
+    assert await llm.ainvoke([]) == "secondary"
+    assert llm.active_index == 1
+    assert await llm.ainvoke([]) == "secondary"
+
+
+@pytest.mark.asyncio
+async def test_async_all_backends_failing_raises_with_the_last_cause() -> None:
+    llm = FallbackLLM([_Boom(RuntimeError("first")), _Boom(RuntimeError("last"))])
+    with pytest.raises(RuntimeError, match="all 2 backends failed") as exc:
+        await llm.ainvoke([])
+    assert str(exc.value.__cause__) == "last"

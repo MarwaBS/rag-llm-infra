@@ -125,39 +125,43 @@ class TestRWLock:
         lock.acquire_read()  # an existing reader holds the lock
 
         writer_done = threading.Event()
+        reader2_done = threading.Event()
 
         def writer():
             lock.acquire_write()
             writer_done.set()
             lock.release_write()
 
-        wt = threading.Thread(target=writer)
-        wt.start()
-
-        deadline = time.time() + 2.0
-        while lock._writers_waiting == 0 and time.time() < deadline:
-            time.sleep(0.005)
-        assert lock._writers_waiting == 1  # writer is queued
-
-        reader2_done = threading.Event()
-
         def reader2():
             lock.acquire_read()
             reader2_done.set()
             lock.release_read()
 
-        rt = threading.Thread(target=reader2)
-        rt.start()
-        time.sleep(0.05)
-        # The new reader must yield to the waiting writer, not jump the queue.
-        assert not reader2_done.is_set()
-        assert not writer_done.is_set()  # writer still blocked by the first reader
+        # Daemon threads, an unconditional release, and bounded joins: when this
+        # regression returns, the assertion below fires while a thread is still
+        # blocked on the lock, and none of that may stop pytest reporting it.
+        wt = threading.Thread(target=writer, daemon=True)
+        rt = threading.Thread(target=reader2, daemon=True)
+        try:
+            wt.start()
+            deadline = time.time() + 2.0
+            while lock._writers_waiting == 0 and time.time() < deadline:
+                time.sleep(0.005)
+            assert lock._writers_waiting == 1  # writer is queued
 
-        lock.release_read()  # release the original reader -> writer can proceed
+            rt.start()
+            time.sleep(0.05)
+            # The new reader must yield to the waiting writer, not jump the queue.
+            assert not reader2_done.is_set()
+            assert not writer_done.is_set()  # still blocked by the first reader
+        finally:
+            lock.release_read()
+
         assert writer_done.wait(timeout=2.0)
         assert reader2_done.wait(timeout=2.0)
-        wt.join()
-        rt.join()
+        wt.join(timeout=2.0)
+        rt.join(timeout=2.0)
+        assert not (wt.is_alive() or rt.is_alive())
 
 
 class TestEmbeddingEngine:

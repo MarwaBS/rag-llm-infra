@@ -182,3 +182,18 @@ class TestLlmCall:
         with llm_call("test_op", logger=custom_logger) as ctx:
             pass
         assert ctx["status"] == "ok"
+
+
+def test_llm_call_reports_a_measured_latency(caplog) -> None:
+    """Line coverage of the timer is not assertion coverage: a constant would be
+    just as covered. Pin that the number tracks how long the body actually took."""
+    import time as _time
+
+    from rag_llm_infra.log_config import llm_call
+
+    with caplog.at_level(logging.INFO, logger="llm"):
+        with llm_call("probe"):
+            _time.sleep(0.05)
+    records = [r for r in caplog.records if r.message == "llm_call"]
+    assert len(records) == 1
+    assert records[0].llm["latency_ms"] >= 40.0, records[0].llm

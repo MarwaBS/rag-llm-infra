@@ -60,3 +60,30 @@ def test_reindex_with_smaller_corpus_never_500s() -> None:
     r = client.post("/query", json={"query": "vectors", "k": 5})
     assert r.status_code == 200
     assert r.json()["retrieved"] == ["only one vectors doc"]
+
+
+def test_the_served_version_is_the_package_version() -> None:
+    # A hardcoded literal here drifted from the released package once already.
+    import rag_llm_infra
+
+    assert app.version == rag_llm_infra.__version__
+
+
+def test_query_drops_the_padding_a_backend_uses_for_a_short_row(monkeypatch) -> None:
+    """A backend may pad a short result row with the sentinel index -1. Indexing
+    the corpus with it returns the LAST document as a spurious match."""
+    import numpy as np
+
+    class _PaddingStore:
+        def add(self, vectors) -> None:
+            pass
+
+        def search(self, query, k):
+            return np.array([[1.0, -1.0]]), np.array([[0, -1]])
+
+    monkeypatch.setattr(serve, "get_vector_store", lambda _name: _PaddingStore())
+    client.post("/index", json={"documents": ["first document", "last document"]})
+    retrieved = client.post("/query", json={"query": "first", "k": 2}).json()[
+        "retrieved"
+    ]
+    assert retrieved == ["first document"]

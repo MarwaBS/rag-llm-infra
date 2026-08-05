@@ -276,3 +276,26 @@ class TestProtocolShape:
     def test_backend_name_is_nonempty_string(self, impl_cls) -> None:
         instance = impl_cls()
         assert isinstance(instance.backend_name, str) and instance.backend_name
+
+
+class TestOpenAIBackendClientLifecycle:
+    """The lazily built clients, and closing whichever were built."""
+
+    def test_async_client_is_built_from_the_sdk_on_first_use(self) -> None:
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            assert llm._aclient is None
+            assert llm.aclient is fake_openai.AsyncOpenAI.return_value
+            assert llm.aclient is llm._aclient  # built once, then reused
+
+    def test_close_closes_only_the_clients_that_were_built(self) -> None:
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            built = llm.aclient
+            llm.close()
+            built.close.assert_called_once()
+            fake_openai.OpenAI.return_value.close.assert_not_called()
