@@ -37,11 +37,11 @@
       ],
       "worst_faithful": 0.7778
     },
-    "rule": "boundary = midpoint(worst faithful, best hallucinated); margin_min = half the observed separation; both floored to 3dp"
+    "rule": "populations must separate across 0.5, the midpoint of the metric's documented range; boundary = midpoint(worst faithful, best hallucinated); margin_min = half the observed separation; floored to 3dp"
   },
   "retrieval": {
     "floors": {
-      "mrr": 0.833,
+      "mrr": 0.916,
       "recall@1": 0.833
     },
     "measured": {
@@ -49,6 +49,6 @@
       "n": 6,
       "recall@1": 1.0
     },
-    "rule": "floor = (n-1)/n, floored to 3dp: one query may regress, two may not"
+    "rule": "floor = the score when exactly one of n queries slips one rank, floored to 3dp; a worse slip or a second one falls below it"
   }
 }

@@ -49,11 +49,23 @@ def _generation() -> dict[str, Any]:
     }
     worst_faithful = min(row["score"] for row in scored["faithful"])
     best_hallucinated = max(row["score"] for row in scored["hallucinated"])
+    # Floors derived from the metric cannot also police it: re-deriving after a
+    # distortion just moves them out of its way. This is the check that does not
+    # move — groundedness is documented as a [0,1] support fraction, so a metric
+    # worth gating must put the two labelled populations on opposite sides of
+    # that range's midpoint. Below, no floors are written at all.
+    if not best_hallucinated < 0.5 <= worst_faithful:
+        raise SystemExit(
+            f"refusing to derive: the metric does not separate the labelled "
+            f"populations across 0.5 (worst faithful {worst_faithful}, "
+            f"best hallucinated {best_hallucinated})"
+        )
     midpoint = (worst_faithful + best_hallucinated) / 2
     return {
         "rule": (
-            "boundary = midpoint(worst faithful, best hallucinated); "
-            "margin_min = half the observed separation; both floored to 3dp"
+            "populations must separate across 0.5, the midpoint of the metric's "
+            "documented range; boundary = midpoint(worst faithful, best "
+            "hallucinated); margin_min = half the observed separation; floored to 3dp"
         ),
         "measured": {
             **scored,
@@ -71,11 +83,20 @@ def _generation() -> dict[str, Any]:
 def _retrieval() -> dict[str, Any]:
     n = len(retrieval_eval.QUERIES)
     measured = retrieval_eval.evaluate()
-    tolerated = _floor3((n - 1) / n)
+    # One query slipping by a single rank is tolerated; anything worse, or a
+    # second one, is not. Each floor is that exact score. MRR needs its own,
+    # because MRR >= recall@1 for every ranking: sharing recall's floor would
+    # leave it unable to reject anything recall had not rejected first.
     return {
-        "rule": "floor = (n-1)/n, floored to 3dp: one query may regress, two may not",
+        "rule": (
+            "floor = the score when exactly one of n queries slips one rank, "
+            "floored to 3dp; a worse slip or a second one falls below it"
+        ),
         "measured": {"n": n, **{k: round(v, 4) for k, v in measured.items()}},
-        "floors": {"recall@1": tolerated, "mrr": tolerated},
+        "floors": {
+            "recall@1": _floor3((n - 1) / n),
+            "mrr": _floor3((n - 1 + 0.5) / n),
+        },
     }
 
 
