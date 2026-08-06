@@ -56,11 +56,30 @@ def test_two_stores_that_named_different_collections_keep_their_data(
     assert second.size == 1
 
 
+def test_size_asks_the_collection_every_time(
+    one_endpoint: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hold the call, not its result. Comparing readings only catches a memo
+    that latched a non-zero first value — a sticky zero passes that and makes
+    `search` return nothing forever."""
+    store = vs.QdrantVectorStore(collection="owned")
+    store.add(np.eye(3, dtype="float32"))
+    real = store._client.count
+    calls = []
+
+    def counted(**kwargs: Any) -> Any:
+        calls.append(kwargs["collection_name"])
+        return real(**kwargs)
+
+    monkeypatch.setattr(store._client, "count", counted)
+    assert [store.size, store.size, store.size] == [3, 3, 3]
+    assert calls == ["owned"] * 3, f"size answered {3 - len(calls)} time(s) from a memo"
+
+
 def test_size_counts_the_collection_rather_than_remembering(
     one_endpoint: Any,
 ) -> None:
-    """Read twice across a write this store did not make. One reading cannot
-    tell a live count from a value memoised on first access."""
+    """Read twice across a write this store did not make."""
     store = vs.QdrantVectorStore(collection="owned")
     store.add(np.eye(3, dtype="float32"))
     assert store.size == 3
@@ -77,6 +96,12 @@ def test_size_counts_the_collection_rather_than_remembering(
         ),
     )
     assert store.size == 0
+
+    # Back up again: a memo that latches on the zero would stay at zero here,
+    # and `search` would return nothing for the life of the store.
+    refill = vs.QdrantVectorStore(collection="owned")
+    refill.add(np.eye(2, 3, dtype="float32"))
+    assert store.size == 2
 
 
 def test_search_sizes_its_rows_from_a_count_it_re_reads(one_endpoint: Any) -> None:

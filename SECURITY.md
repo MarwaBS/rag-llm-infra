@@ -2,12 +2,12 @@
 
 ## Supported versions
 
-Only the latest published `0.1.x` release on PyPI receives fixes.
+Only the latest published minor release on PyPI receives fixes.
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | ✅        |
-| < 0.1   | ❌        |
+| 0.2.x   | ✅        |
+| < 0.2   | ❌        |
 
 ## Reporting a vulnerability
 
@@ -18,7 +18,7 @@ If you find a security issue, please report it privately by emailing
 Please do not open a public issue for a vulnerability before it is fixed.
 
 I will acknowledge within 7 days and aim to ship a fix or documented mitigation
-within 30 days, then publish a patched `0.1.x` release to PyPI.
+within 30 days, then publish a patched release to PyPI.
 
 ## Scope
 
@@ -38,7 +38,7 @@ expose it.
 
 **The JSON log formatter does not redact.** `log_config` forwards the fields a
 caller attaches via `extra={...}` into the log line verbatim. It drops names
-beginning with `_` and a fixed list of `LogRecord` attribute names; everything
-else on the record is emitted, including attributes a future Python adds. The
-library reads no credentials of its own and logs none, but it will faithfully log
-a secret you hand it — keep credentials out of `extra`.
+beginning with `_` and every field a bare `LogRecord` already carries; whatever
+the caller added is emitted. The library reads no credentials of its own and logs
+none, but it will faithfully log a secret you hand it — keep credentials out of
+`extra`.

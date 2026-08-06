@@ -27,14 +27,18 @@ try:
 except ImportError:
     FAISS_AVAILABLE = False
 except Exception:
-    # Present but unloadable — a native extension without its runtime raises
-    # OSError, not ImportError. Logged below, once the logger exists.
+    # Present but unloadable: a ctypes load inside the package raises OSError,
+    # which is not an ImportError. Logged below, once the logger exists.
     FAISS_AVAILABLE = False
     _FAISS_LOAD_ERROR: BaseException | None = sys.exc_info()[1]
 
 logger = logging.getLogger(__name__)
-if globals().get("_FAISS_LOAD_ERROR") is not None:
-    logger.warning("faiss is installed but failed to load: %s", _FAISS_LOAD_ERROR)
+if not FAISS_AVAILABLE:
+    error = globals().get("_FAISS_LOAD_ERROR")
+    if error is None:
+        logger.debug("faiss not installed; NumPy backend only")
+    else:
+        logger.warning("faiss is installed but failed to load: %s", error)
 
 CONFIG: dict[str, Any] = {
     "max_embedding_cache": int(os.getenv("EVIDENCE_MAX_CACHE", "2000")),

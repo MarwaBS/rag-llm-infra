@@ -31,13 +31,13 @@ Conforms to `LLMProtocol`, so it is a drop-in anywhere a single backend is used:
     llm = FallbackLLM([get_llm("openai"), get_llm("mock")])
 
 Thread safety: a single `FallbackLLM` is safe to share across threads. The only
-mutable state is `_active`, the budget-exhaustion high-water mark. It advances
-*monotonically*, so concurrent calls can never move it backward. The backends do
-the real work outside any lock, so there is no added contention.
+mutable state is `_active`, the budget-exhaustion high-water mark. Its
+read-modify-write is taken under a lock, so it advances monotonically even when
+a timed-out worker writes it from its own thread. The backends do the real work
+outside that lock, so there is no added contention.
 
-Being lock-free has one benign cost. Two threads racing on the same
-just-exhausted backend may each see the `BudgetExhausted` once before `_active`
-settles. The chain still trips forward correctly.
+Bounded: two threads racing on the same just-exhausted backend may each see the
+`BudgetExhausted` once before `_active` settles. The chain still trips forward.
 """
 
 from __future__ import annotations
@@ -96,7 +96,14 @@ class FallbackLLM:
         self._retry_on = retry_on
         self._timeout_s = timeout_s
         self._active = 0
+        # A timed-out worker writes `_active` from its own thread.
+        self._active_lock = threading.Lock()
         self.backend_version = "+".join(b.backend_name for b in self._backends)
+
+    def _trip_past(self, index: int) -> None:
+        """Skip backend `index` for the rest of this object's life."""
+        with self._active_lock:
+            self._active = max(self._active, index + 1)
 
     def _within_deadline(self, index: int, call: Callable[[], str]) -> str:
         """Run `call`, giving up on it after `timeout_s`.
@@ -121,7 +128,7 @@ class FallbackLLM:
             except BaseException as exc:  # noqa: BLE001 - re-raised on the caller's thread
                 failure.append(exc)
                 if isinstance(exc, BudgetExhausted):
-                    self._active = max(self._active, index + 1)
+                    self._trip_past(index)
 
         worker = threading.Thread(target=run, daemon=True)
         worker.start()
@@ -153,7 +160,7 @@ class FallbackLLM:
                 last = exc
                 # Permanent: never retry an exhausted backend. `max` keeps the
                 # advance monotonic so a slower concurrent call can't regress it.
-                self._active = max(self._active, i + 1)
+                self._trip_past(i)
             except _NON_RETRYABLE:
                 raise  # a bug, not a provider failure — surface it, don't fall through
             except self._retry_on as exc:
@@ -169,13 +176,14 @@ class FallbackLLM:
                 call = self._backends[i].ainvoke(messages, **kwargs)
                 if self._timeout_s is None:
                     return await call
+                task = asyncio.ensure_future(call)
                 try:
-                    # asyncio cancels the coroutine, so this deadline stops it.
-                    return await asyncio.wait_for(call, self._timeout_s)
+                    return await asyncio.wait_for(task, self._timeout_s)
                 except TimeoutError as exc:
-                    # Only the deadline this line imposed. A TimeoutError the
-                    # backend itself raised goes through `retry_on`, so the two
-                    # paths agree on identical input.
+                    # Cancellation tells our deadline from the backend's own
+                    # TimeoutError; the type cannot.
+                    if not task.cancelled():
+                        raise
                     raise BackendTimeout(
                         f"backend did not answer within {self._timeout_s}s"
                     ) from exc
@@ -183,7 +191,7 @@ class FallbackLLM:
                 last = exc
             except BudgetExhausted as exc:
                 last = exc
-                self._active = max(self._active, i + 1)
+                self._trip_past(i)
             except _NON_RETRYABLE:
                 raise
             except self._retry_on as exc:

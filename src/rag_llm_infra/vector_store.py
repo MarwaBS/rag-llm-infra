@@ -88,10 +88,10 @@ try:
 
     FAISS_AVAILABLE: bool = _FAISS_AVAILABLE
 except ImportError:  # pragma: no cover - defensive
+    logger.debug("faiss capability flag unreadable; assuming unavailable")
     FAISS_AVAILABLE = False
 except Exception as exc:  # pragma: no cover - defensive
-    # A native extension that is present but will not load raises OSError, not
-    # ImportError. Degrade to NumPy either way; say which happened.
+    # A ctypes load inside the package raises OSError, not ImportError.
     logger.warning("FAISS is installed but failed to load: %s", exc)
     FAISS_AVAILABLE = False
 
@@ -106,6 +106,7 @@ try:
 
     QDRANT_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover - exercised in envs without qdrant-client
+    logger.debug("qdrant-client not installed; the qdrant backend is unavailable")
     QDRANT_AVAILABLE = False
     QdrantClient = None  # type: ignore[misc,assignment]
     qdrant_models = None  # type: ignore[assignment]

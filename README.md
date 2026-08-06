@@ -93,7 +93,7 @@ in the `faithfulness` module docstring and pinned by tests.
 ## Engineering principles demonstrated
 
 - **Swap by interface** — `LLMProtocol` / `VectorStoreProtocol` make the model and the index runtime-swappable.
-- **Degrade, don't crash — where a degraded answer is still an answer.** FAISS / Qdrant / OpenTelemetry / SentenceTransformers are lazily imported with working fallbacks, so a missing native library never breaks import. The LLM factory is the deliberate exception: `get_llm("auto")` raises rather than falling back to the mock backend, because a fabricated answer is worse than none.
+- **Degrade, don't crash — where a degraded answer is still an answer.** FAISS / Qdrant / OpenTelemetry / SentenceTransformers are optional. Each is probed at import behind a handler that treats a missing library and one that fails to load alike, so neither stops `import rag_llm_infra`; a test simulates both. The LLM factory is the deliberate exception: `get_llm("auto")` raises rather than falling back to the mock backend, because a fabricated answer is worse than none.
 - **Measured, not asserted** — a retrieval eval gate, not just unit tests; packaged and CI-built end to end.
 
 ## Develop / test

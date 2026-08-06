@@ -24,6 +24,13 @@ def test_both_declarations_of_the_version_agree() -> None:
     assert rag_llm_infra.__version__ == _declared()
 
 
+def test_the_security_policy_covers_the_version_being_shipped() -> None:
+    """It names the supported series, so it goes stale on every minor bump."""
+    series = ".".join(_declared().split(".")[:2])
+    policy = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    assert f"| {series}.x" in policy, f"SECURITY.md does not support {series}.x"
+
+
 def test_every_documented_version_carries_a_compare_link() -> None:
     """A section without one leaves a reader no way to see what changed."""
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

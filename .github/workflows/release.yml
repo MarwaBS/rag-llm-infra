@@ -52,7 +52,7 @@ jobs:
       - name: Format check (ruff)
         run: ruff format --check .
       - name: Type-check (mypy)
-        run: mypy src scripts
+        run: mypy src scripts benchmarks
 
       - name: Spell check (codespell)
         run: codespell

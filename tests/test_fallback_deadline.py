@@ -147,12 +147,18 @@ class _Timeouts:
 
 
 @pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.parametrize("timeout_s", [None, 5.0])
 async def test_a_backend_raised_timeout_is_routed_the_same_way_on_both_paths(
-    use_async: bool,
+    use_async: bool, timeout_s: float | None
 ) -> None:
     """A `TimeoutError` the backend raises is the backend's, not the deadline's,
-    so it goes through `retry_on` — and both paths must agree."""
-    chain = FallbackLLM([_Timeouts(), _Backend("fast")], retry_on=(ConnectionError,))
+    so it goes through `retry_on`. Both paths must agree, and the case that
+    matters is with a deadline set — without one the async branch never runs."""
+    chain = FallbackLLM(
+        [_Timeouts(), _Backend("fast")],
+        retry_on=(ConnectionError,),
+        timeout_s=timeout_s,
+    )
     with pytest.raises(TimeoutError):
         await chain.ainvoke(MESSAGES) if use_async else chain.invoke(MESSAGES)
 
@@ -182,6 +188,15 @@ def test_a_budget_trip_raised_after_the_deadline_still_advances_the_chain() -> N
     assert chain.invoke(MESSAGES) == "fast answer"
     assert chain.active_index == 1, "the exhausted backend was never skipped"
     assert exhausted.calls <= 3, f"billed {exhausted.calls} times after exhaustion"
+
+
+def test_the_high_water_mark_only_ever_moves_forward() -> None:
+    """A timed-out worker trips it from its own thread carrying a stale index."""
+    chain = FallbackLLM([_Backend("a"), _Backend("b"), _Backend("c")])
+    chain._trip_past(1)
+    assert chain.active_index == 2
+    chain._trip_past(0)
+    assert chain.active_index == 2
 
 
 def test_the_deadline_applies_past_the_first_position() -> None:

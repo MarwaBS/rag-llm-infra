@@ -349,8 +349,8 @@
       "id": "M44",
       "why": "the async path drops its deadline, so a hanging coroutine is never cancelled",
       "file": "src/rag_llm_infra/fallback.py",
-      "find": "                return await asyncio.wait_for(call, self._timeout_s)",
-      "replace": "                return await call",
+      "find": "                    return await asyncio.wait_for(task, self._timeout_s)",
+      "replace": "                    return await task",
       "gates": ["pytest tests/test_fallback_deadline.py"]
     },
     {
@@ -421,7 +421,7 @@
       "id": "M53",
       "why": "a budget trip raised after the deadline is discarded, so an exhausted provider is billed again",
       "file": "src/rag_llm_infra/fallback.py",
-      "find": "                if isinstance(exc, BudgetExhausted):\n                    self._active = max(self._active, index + 1)",
+      "find": "                if isinstance(exc, BudgetExhausted):\n                    self._trip_past(index)",
       "replace": "                pass",
       "gates": ["pytest tests/test_fallback_deadline.py"]
     },
@@ -440,6 +440,38 @@
       "find": "        worker = threading.Thread(target=run, daemon=True)",
       "replace": "        worker = threading.Thread(target=run, daemon=False)",
       "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M56",
+      "why": "the trace-context lookup narrows again, so a broken tracer drops every log record",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "    except Exception:\n        # Runs inside format()",
+      "replace": "    except ImportError:\n        # Runs inside format()",
+      "gates": ["pytest tests/test_broken_optional_deps.py"]
+    },
+    {
+      "id": "M57",
+      "why": "the async path stops telling its own deadline from a TimeoutError the backend raised",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "                    if not task.cancelled():\n                        raise\n",
+      "replace": "",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M58",
+      "why": "the budget high-water mark stops being monotonic, so a stale index can move it backward",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "            self._active = max(self._active, index + 1)",
+      "replace": "            self._active = index + 1",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M59",
+      "why": "size latches a zero reading, so search returns nothing for the life of the store",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        return int(self._client.count(collection_name=self._collection).count)",
+      "replace": "        if getattr(self, \"_zero\", False):\n            return 0\n        held = int(self._client.count(collection_name=self._collection).count)\n        self._zero = held == 0\n        return held",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
     },
     {
       "id": "C1",

@@ -54,24 +54,28 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
 - **Equal scores came back in whatever order the partition left them.**
   `np.argsort` defaults to quicksort, which is not stable. NumPy now orders ties
   by the lower document index. The alternative — a full `lexsort`, which would
-  also fix *which* tied documents are selected — was measured first and costs
-  roughly 20× at a million documents on the machine that measured it. So the
-  selection stays unspecified and the protocol says so rather than implying
-  otherwise. Reproduce with `benchmarks/topk_tie_cost.py`.
+  also fix *which* tied documents are selected — was measured first. It would run
+  on every query, not only tied ones, and on distinct scores at a million
+  documents it costs about 20× (21.7× on the machine that measured it; 1.8× when
+  every score ties). So the selection stays unspecified and the protocol says so
+  rather than implying otherwise. Reproduce with `benchmarks/topk_tie_cost.py`,
+  which prints its interpreter, numpy version and platform.
 - **The JSON log line carried logging's own fields.** The formatter dropped a
   hand-written list of `LogRecord` attributes — a blacklist over an open set, so
   Python 3.12's `taskName` appeared on every line as `null`. The exclusion set is
   now read from a bare `LogRecord`, so the next such field is excluded on
   arrival. `ts` is UTC with an offset and milliseconds; it was local time to the
   second, which cannot be ordered across hosts.
-- **Four broad handlers, one of which swallowed silently.** The memory-pressure
-  trim now logs when it skips, and the trace-context lookup catches only
-  `ImportError`. The four optional-dependency probes (`faiss`, `psutil`,
-  `qdrant-client`, `sentence-transformers`) tell absence from breakage: a
-  missing library is a debug line, one that is installed but will not load is a
-  warning. Both still degrade — a native extension without its runtime raises
-  `OSError`, and catching only `ImportError` would turn "FAISS is unusable here"
-  into "this package will not import".
+- **The broad exception handlers say what they mean.** The memory-pressure trim
+  logs when it skips instead of passing silently. Each optional-dependency probe
+  (`faiss`, `psutil`, `qdrant-client`, `sentence-transformers`) reports a library
+  that is installed but will not load, at warning level, and still degrades to
+  the fallback. Measured on Windows: a bad extension module raises `ImportError`
+  from the loader, but an explicit `ctypes` load inside a package — the shape
+  `torch` and `sentence-transformers` use — raises `OSError`, which
+  `except ImportError` alone would let escape and stop `import rag_llm_infra`.
+  The trace-context lookup stays broad and cannot report anything: it runs inside
+  `format()`, where raising loses the record and logging recurses.
 - **`QdrantVectorStore.size` counted nothing.** It returned a number remembered
   from the last `add()`. `search` derives its row width from it, so once the
   count was stale the answer was padded with `-1` sentinel indices. It now counts
@@ -164,8 +168,7 @@ Hardening release. Each behavioral fix carries a regression test.
 - **`serve.py` sources the FastAPI `version` from `__version__`** instead of a
   hardcoded `"0.1.0"` that had already drifted from the released package.
 - **`FallbackLLM` documents its thread-safety contract** and advances its
-  budget-exhaustion high-water mark monotonically (`max(...)`), so a concurrent
-  call can never regress it.
+  budget-exhaustion high-water mark monotonically (`max(...)`).
 - **Release workflow is gated and uses build-once / promote.** Publishing on a
   `v*` tag now runs the full ruff / format / mypy / pytest / eval suite first,
   asserts the tag matches the package version, then builds the wheel + sdist and

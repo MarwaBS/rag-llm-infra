@@ -47,6 +47,21 @@ import rag_llm_infra
 from rag_llm_infra import get_vector_store, get_llm
 store = get_vector_store("auto")
 store.add(__import__("numpy").eye(3, dtype="float32"))
+
+# A structured log line must still come out: the trace-context lookup runs
+# inside format(), so a fault there costs the record, not just the trace id.
+import io, json, logging
+from rag_llm_infra.log_config import _JsonFormatter
+buffer = io.StringIO()
+handler = logging.StreamHandler(buffer)
+handler.setFormatter(_JsonFormatter())
+log = logging.getLogger("probe")
+log.addHandler(handler)
+log.setLevel(logging.INFO)
+log.info("hello", extra={{"request_id": "r1"}})
+emitted = json.loads(buffer.getvalue().strip())
+assert emitted["msg"] == "hello" and emitted["request_id"] == "r1", emitted
+
 print("OK", rag_llm_infra.__version__, store.backend_name, store.size)
 """
 

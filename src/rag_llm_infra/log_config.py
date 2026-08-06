@@ -36,9 +36,9 @@ def _get_trace_context() -> dict[str, str]:
         from .tracing import current_trace_context
 
         return current_trace_context()
-    except ImportError:
-        # OpenTelemetry is optional. Anything else here is a bug in tracing, and
-        # reading it as "no active span" would hide it on every log line.
+    except Exception:
+        # Runs inside format(): raising loses the record, logging here recurses.
+        # So a tracing fault reads as "no active span".
         return {"trace_id": "", "span_id": ""}
 
 
