@@ -93,16 +93,16 @@
       "id": "M13",
       "why": "the fallback retries a backend whose budget is already exhausted",
       "file": "src/rag_llm_infra/fallback.py",
-      "find": "        for i in range(self._active, len(self._backends)):\n            try:\n                return self._backends[i].invoke(messages, **kwargs)",
-      "replace": "        for i in range(0, len(self._backends)):\n            try:\n                return self._backends[i].invoke(messages, **kwargs)",
+      "find": "        for i in range(self._active, len(self._backends)):\n            try:\n                backend = self._backends[i]",
+      "replace": "        for i in range(0, len(self._backends)):\n            try:\n                backend = self._backends[i]",
       "gates": ["pytest tests/test_fallback.py"]
     },
     {
       "id": "M14",
       "why": "the same, on the async path",
       "file": "src/rag_llm_infra/fallback.py",
-      "find": "        for i in range(self._active, len(self._backends)):\n            try:\n                return await self._backends[i].ainvoke(messages, **kwargs)",
-      "replace": "        for i in range(0, len(self._backends)):\n            try:\n                return await self._backends[i].ainvoke(messages, **kwargs)",
+      "find": "        for i in range(self._active, len(self._backends)):\n            try:\n                call = self._backends[i].ainvoke(messages, **kwargs)",
+      "replace": "        for i in range(0, len(self._backends)):\n            try:\n                call = self._backends[i].ainvoke(messages, **kwargs)",
       "gates": ["pytest tests/test_fallback.py"]
     },
     {
@@ -189,17 +189,17 @@
       "id": "M25",
       "why": "the log formatter stops dropping leading-underscore fields",
       "file": "src/rag_llm_infra/log_config.py",
-      "find": "            if key.startswith(\"_\") or key in {",
-      "replace": "            if key in {",
-      "gates": ["pytest tests/test_log_config.py"]
+      "find": "            if key.startswith(\"_\") or key in _RECORD_OWN_FIELDS:",
+      "replace": "            if key in _RECORD_OWN_FIELDS:",
+      "gates": ["pytest tests/test_log_schema.py"]
     },
     {
       "id": "M26",
       "why": "the formatter forwards the record's own machinery as if it were caller data",
       "file": "src/rag_llm_infra/log_config.py",
-      "find": "                \"message\",\n                \"asctime\",",
-      "replace": "                \"placeholder-that-is-not-a-record-attribute\",",
-      "gates": ["pytest tests/test_log_config.py"]
+      "find": ") | {\"message\", \"asctime\"}",
+      "replace": ")",
+      "gates": ["pytest tests/test_log_schema.py"]
     },
     {
       "id": "M27",
@@ -312,6 +312,94 @@
       "find": "    if not best_hallucinated < 0.5 <= worst_faithful:",
       "replace": "    if False:",
       "gates": ["pytest tests/test_floor_refusal.py"]
+    },
+    {
+      "id": "M40",
+      "why": "the owned collection gets a default name again, so two stores silently share one and the second add wipes the first",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "    def __init__(self, collection: str, url: str | None = None) -> None:",
+      "replace": "    def __init__(self, collection: str = \"evidence\", url: str | None = None) -> None:",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M41",
+      "why": "search sizes its rows from the request instead of the collection, so a shrunken store pads the answer with sentinels",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        held = self.size\n",
+      "replace": "        held = k\n",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M42",
+      "why": "the factory stops requiring a collection name for qdrant",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        if collection is None:\n            raise ValueError(",
+      "replace": "        if False:\n            raise ValueError(",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M43",
+      "why": "the sync deadline waits forever, so a hanging provider holds the whole chain again",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        worker.join(self._timeout_s)",
+      "replace": "        worker.join()",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M44",
+      "why": "the async path drops its deadline, so a hanging coroutine is never cancelled",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "                return await asyncio.wait_for(call, self._timeout_s)",
+      "replace": "                return await call",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M45",
+      "why": "a non-positive deadline is accepted, so a zero timeout silently gives every backend no time at all",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        if timeout_s is not None and timeout_s <= 0:",
+      "replace": "        if False:",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M46",
+      "why": "the trim derives its limit from the current one, so repeated pressure walks the cache down to nothing",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "                reduction = max(1, self._configured_cache_size // 2)",
+      "replace": "                reduction = max(1, self._max_cache_size // 2)",
+      "gates": ["pytest tests/test_cache_pressure_bounds.py"]
+    },
+    {
+      "id": "M47",
+      "why": "a fixed floor returns, so pressure raises any configured limit below it",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "                reduction = max(1, self._configured_cache_size // 2)",
+      "replace": "                reduction = max(100, self._configured_cache_size // 2)",
+      "gates": ["pytest tests/test_cache_pressure_bounds.py"]
+    },
+    {
+      "id": "M48",
+      "why": "the limit stops recovering, so one pressure spike shrinks the cache for the process's life",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "            else:\n                self._max_cache_size = self._configured_cache_size",
+      "replace": "",
+      "gates": ["pytest tests/test_cache_pressure_bounds.py"]
+    },
+    {
+      "id": "M49",
+      "why": "the tie-break returns to an unstable sort, so equal scores come back in whatever order the partition left",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        order = np.lexsort((top_idx, -top_scores), axis=1)",
+      "replace": "        order = np.argsort(-top_scores, axis=1, kind=\"quicksort\")",
+      "gates": ["pytest tests/test_tie_order.py"]
+    },
+    {
+      "id": "M50",
+      "why": "the tie-break outranks the score, so a worse match can be returned first",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        order = np.lexsort((top_idx, -top_scores), axis=1)",
+      "replace": "        order = np.lexsort((-top_scores, top_idx), axis=1)",
+      "gates": ["pytest tests/test_tie_order.py"]
     },
     {
       "id": "C1",

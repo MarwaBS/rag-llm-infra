@@ -316,6 +316,7 @@ class TestMemoryPressureTrim:
         )
         fake = _FakeEmbedder()
         eng = ei.EmbeddingEngine(model=fake)
+        eng._configured_cache_size = cap
         eng._max_cache_size = cap
         eng._last_memory_check = time.time()  # throttled during the fill
         eng.embed_batch([f"pressure text {i}" for i in range(n_texts)])
@@ -325,11 +326,11 @@ class TestMemoryPressureTrim:
 
     def test_pressure_evicts_oldest_and_shrinks_cap(self, monkeypatch):
         """Above the threshold, the cache must actually shrink (oldest first)
-        and the cap must come down: reduction = max(100, int(cap * 0.5))."""
+        and the cap must come down: reduction = configured // 2."""
         eng, fake = self._pressured_engine(monkeypatch, percent=95.0, cap=150)
         eng.embed_batch(["trigger"])  # trips the pressure check
-        assert eng._max_cache_size == 100  # max(100, int(150 * 0.5))
-        assert eng.get_stats()["cache_size"] == 100  # 50 oldest trimmed, +1, -1
+        assert eng._max_cache_size == 75  # 150 // 2
+        assert eng.get_stats()["cache_size"] == 75  # 75 oldest trimmed, +1, -1
         # Eviction is insertion-ordered: re-embedding the oldest entry costs a
         # fresh encode, the newest is a pure cache hit.
         encoded_before = fake.total_encoded

@@ -26,6 +26,7 @@ import os
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -35,12 +36,24 @@ def _get_trace_context() -> dict[str, str]:
         from .tracing import current_trace_context
 
         return current_trace_context()
-    except Exception:
+    except ImportError:
+        # OpenTelemetry is optional. Anything else here is a bug in tracing, and
+        # reading it as "no active span" would hide it on every log line.
         return {"trace_id": "", "span_id": ""}
 
 
 ENV: str = os.getenv("ENV", "dev").lower()
 _CONFIGURED = False
+
+
+# What logging itself puts on a record, read from a real one rather than listed.
+# A hand-written list is a blacklist over an open set: Python 3.12 added
+# `taskName` and every line started carrying `"taskName": null`. Building the set
+# from a bare LogRecord means the next such field is excluded on arrival.
+# `message` and `asctime` are added later, by Formatter.format.
+_RECORD_OWN_FIELDS = frozenset(
+    logging.LogRecord("", 0, "", 0, "", None, None).__dict__
+) | {"message", "asctime"}
 
 
 class _JsonFormatter(logging.Formatter):
@@ -51,7 +64,11 @@ class _JsonFormatter(logging.Formatter):
         # request_id is attached by the caller via `extra={"request_id": ...}`
         _request_id = getattr(record, "request_id", "")
         payload: dict[str, Any] = {
-            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            # UTC with an offset and milliseconds. A bare local-time string to
+            # the second cannot be ordered across hosts or inside a busy second.
+            "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(
+                timespec="milliseconds"
+            ),
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
@@ -63,30 +80,7 @@ class _JsonFormatter(logging.Formatter):
             payload["exc"] = self.formatException(record.exc_info)
         # Forward any extra={} fields attached by the caller
         for key, val in record.__dict__.items():
-            if key.startswith("_") or key in {
-                "msg",
-                "args",
-                "levelname",
-                "levelno",
-                "pathname",
-                "filename",
-                "module",
-                "exc_info",
-                "exc_text",
-                "stack_info",
-                "lineno",
-                "funcName",
-                "created",
-                "msecs",
-                "relativeCreated",
-                "thread",
-                "threadName",
-                "processName",
-                "process",
-                "name",
-                "message",
-                "asctime",
-            }:
+            if key.startswith("_") or key in _RECORD_OWN_FIELDS:
                 continue
             payload[key] = val
         return json.dumps(payload, default=str)

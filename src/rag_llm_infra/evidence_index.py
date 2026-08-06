@@ -46,8 +46,12 @@ try:
     from sentence_transformers import SentenceTransformer
 
     SENTENCE_TRANSFORMERS_AVAILABLE = True
-except Exception as e:
-    logger.debug("SentenceTransformers unavailable; embedding features disabled: %s", e)
+except ImportError as exc:
+    logger.debug("SentenceTransformers not installed: %s", exc)
+except Exception as exc:
+    # Installed but failing to import is a fault, not an absence. Degrade either
+    # way, but say which happened.
+    logger.warning("SentenceTransformers failed to import: %s", exc)
 
 try:
     import psutil
@@ -172,7 +176,10 @@ class EmbeddingEngine:
         self._cache: OrderedDict[str, Any] = OrderedDict()
         self._lock = RWLock()
         self._stats_lock = threading.Lock()
-        self._max_cache_size = CONFIG["max_embedding_cache"]
+        # The ceiling the operator set, kept so a trim can be undone when
+        # pressure clears and can never derive a limit above it.
+        self._configured_cache_size = CONFIG["max_embedding_cache"]
+        self._max_cache_size = self._configured_cache_size
         self._total_requests = 0
         self._cache_hits = 0
         self._last_memory_check = time.time()
@@ -200,14 +207,21 @@ class EmbeddingEngine:
         try:
             memory_percent = psutil.virtual_memory().percent
             if memory_percent > CONFIG["memory_warning_threshold"] * 100:
-                reduction = max(100, int(self._max_cache_size * 0.5))
+                # Halve the configured limit, not the already-halved one, and
+                # never exceed what the operator asked for. A floor above the
+                # configured size raises the cap under pressure.
+                reduction = max(1, self._configured_cache_size // 2)
                 with self._lock.write_lock:
                     while len(self._cache) > reduction:
                         self._cache.popitem(last=False)
                 self._max_cache_size = reduction
+            else:
+                self._max_cache_size = self._configured_cache_size
         # Memory-pressure cache trim is best-effort; never break ingest on failure.
-        except Exception:  # nosec B110
-            pass
+        except Exception as exc:
+            # Trimming is best-effort and must not break ingest, but a silent
+            # pass hides a psutil that is failing on every call.
+            logger.warning("memory-pressure trim skipped: %s", exc)
 
     def embed_batch(
         self, texts: list[str], namespace: str = "default"

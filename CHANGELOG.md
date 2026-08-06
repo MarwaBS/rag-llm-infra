@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.3] - unreleased
+## [0.2.0] - unreleased
 
 The suite and both eval gates have each been shown to go red, and so has the
 replay that decides those verdicts.
@@ -28,7 +28,50 @@ mutation that stops the file loading is rejected rather than credited.
 Lint, type-check, spell check and build run third-party tools over the tree and
 carry no registered defect. `example.py` exits on an exception, not on a score.
 
+### Removed — breaking
+- **`QdrantVectorStore` no longer defaults its collection to `"evidence"`.** The
+  name is now the first, required argument, and `get_vector_store("qdrant")`
+  needs `collection=`. `add()` deletes and recreates that collection, so two
+  stores sharing a default name on one endpoint meant the second `add()`
+  destroyed the first one's vectors. Measured before the change: store A wrote 3
+  vectors, store B wrote 1 to the same default name, A reported `size == 3`
+  against a collection holding 1, and `search(k=3)` answered `[0, -1, -1]`.
+  Migration: pass the name your service owns.
+
 ### Fixed
+- **A hanging provider held the whole fallback chain.** `FallbackLLM` advances
+  when a backend raises, and a provider that blocks raises nothing — the failure
+  the module exists to survive. Measured: `[slow(3s), fast]` returned the slow
+  answer after 3.00s. Pass `timeout_s=` and a backend that does not answer in
+  time raises `BackendTimeout`, which is retryable. Bounded: on the sync path
+  this stops waiting, it does not cancel — the call continues on a daemon thread
+  and its answer is discarded, because Python cannot interrupt a blocking socket
+  read in another thread. The async path uses `asyncio.wait_for`, which cancels.
+- **Memory pressure raised the cache limit.** `max(100, limit * 0.5)` meant any
+  configured limit below 200 grew under pressure — measured: 50 became 100 — and
+  it never came back. The trim now halves the configured ceiling, never exceeds
+  it, and restores it when pressure clears.
+- **Equal scores came back in whatever order the partition left them.**
+  `np.argsort` defaults to quicksort, which is not stable. NumPy now orders ties
+  by the lower document index. Measured before choosing: a fully deterministic
+  top-k costs 14–22× at scale (88ms against 4.3ms over a million documents), so
+  which documents reach the top-k when more than `k` share the boundary score
+  stays unspecified, and the protocol says so rather than implying otherwise.
+- **The JSON log line carried logging's own fields.** The formatter dropped a
+  hand-written list of `LogRecord` attributes — a blacklist over an open set, so
+  Python 3.12's `taskName` appeared on every line as `null`. The exclusion set is
+  now read from a bare `LogRecord`, so the next such field is excluded on
+  arrival. `ts` is UTC with an offset and milliseconds; it was local time to the
+  second, which cannot be ordered across hosts.
+- **Two handlers swallowed silently and three read a fault as an absence.** The
+  memory-pressure trim now logs when it skips, the trace-context lookup catches
+  only `ImportError`, the FAISS capability probe likewise, and a
+  `sentence-transformers` that is installed but failing to import is reported as
+  a fault rather than as absence.
+- **`QdrantVectorStore.size` counted nothing.** It returned a number remembered
+  from the last `add()`. `search` derives its row width from it, so once the
+  count was stale the answer was padded with `-1` sentinel indices. It now counts
+  the collection, at the cost of one round-trip.
 - **`OpenAIBackend.close()` closed nothing on the async client.** `AsyncOpenAI.close`
   is a coroutine function, so calling it from a sync method discarded the
   coroutine and left the httpx pool open. `close()` now handles the sync client
@@ -141,7 +184,7 @@ Hardening release. Each behavioral fix carries a regression test.
 - Two-sided faithfulness eval gate: an absolute ceiling on the hallucinated
   control, and the margin requirement raised from merely positive to `0.50`,
   alongside the existing floor on the faithful answer. Both fixtures were single
-  answers and the faithful one was a retrieved document verbatim. See 0.1.3 for
+  answers and the faithful one was a retrieved document verbatim. See 0.2.0 for
   what replaced them.
 - Budget-aware `FallbackLLM` with a permanent budget-exhaustion trip.
 

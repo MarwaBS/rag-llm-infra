@@ -8,6 +8,16 @@ forward **permanently** — that provider is skipped for the rest of this object
 life. Other retryable exceptions are transient: the next backend is tried for
 that call only.
 
+A provider that hangs raises nothing, so without a deadline it holds the whole
+chain. Pass `timeout_s=` and a backend that does not answer in time raises
+`BackendTimeout`, which is retryable, so the chain moves on.
+
+Bounded: on the sync path this stops waiting, it does not cancel. The provider
+keeps working on a daemon thread and its answer is discarded. Python cannot
+interrupt a blocking socket read in another thread. The async path uses
+`asyncio.wait_for`, which does cancel. Without `timeout_s` the behaviour is
+unchanged and a hanging provider blocks.
+
 Programming/contract errors (e.g. `TypeError`, `NotImplementedError`) are NOT
 retryable — they propagate, so a misconfigured chain fails loudly instead of
 silently degrading. That is also why you should not chain the `AnthropicBackend`
@@ -30,7 +40,10 @@ settles. The chain still trips forward correctly.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import asyncio
+import threading
+from collections.abc import Callable, Sequence
+from functools import partial
 from typing import Any
 
 from .llm_protocol import LLMProtocol
@@ -53,6 +66,11 @@ class BudgetExhausted(RuntimeError):
     forward permanently rather than retrying the exhausted provider."""
 
 
+class BackendTimeout(TimeoutError):
+    """A backend did not answer inside `timeout_s`. Retryable, so the chain
+    advances."""
+
+
 class FallbackLLM:
     """Route to the next backend on failure; conforms to `LLMProtocol`."""
 
@@ -63,13 +81,45 @@ class FallbackLLM:
         backends: Sequence[LLMProtocol],
         *,
         retry_on: tuple[type[BaseException], ...] = (Exception,),
+        timeout_s: float | None = None,
     ) -> None:
         self._backends: list[LLMProtocol] = list(backends)
         if not self._backends:
             raise ValueError("FallbackLLM requires at least one backend")
+        if timeout_s is not None and timeout_s <= 0:
+            raise ValueError(f"timeout_s must be > 0, got {timeout_s}")
         self._retry_on = retry_on
+        self._timeout_s = timeout_s
         self._active = 0
         self.backend_version = "+".join(b.backend_name for b in self._backends)
+
+    def _within_deadline(self, call: Callable[[], str]) -> str:
+        """Run `call`, giving up on it after `timeout_s`.
+
+        The worker is a daemon so an abandoned call cannot hold interpreter
+        shutdown. Giving up is not cancelling: the provider keeps working and its
+        answer is discarded. Python cannot interrupt a blocking socket read in
+        another thread.
+        """
+        if self._timeout_s is None:
+            return call()
+        answer: list[str] = []
+        failure: list[BaseException] = []
+
+        def run() -> None:
+            try:
+                answer.append(call())
+            except BaseException as exc:  # noqa: BLE001 - re-raised on the caller's thread
+                failure.append(exc)
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(self._timeout_s)
+        if worker.is_alive():
+            raise BackendTimeout(f"backend did not answer within {self._timeout_s}s")
+        if failure:
+            raise failure[0]
+        return answer[0]
 
     @property
     def active_index(self) -> int:
@@ -80,7 +130,10 @@ class FallbackLLM:
         last: BaseException | None = None
         for i in range(self._active, len(self._backends)):
             try:
-                return self._backends[i].invoke(messages, **kwargs)
+                backend = self._backends[i]
+                return self._within_deadline(
+                    partial(backend.invoke, messages, **kwargs)
+                )
             except BudgetExhausted as exc:
                 last = exc
                 # Permanent: never retry an exhausted backend. `max` keeps the
@@ -98,7 +151,14 @@ class FallbackLLM:
         last: BaseException | None = None
         for i in range(self._active, len(self._backends)):
             try:
-                return await self._backends[i].ainvoke(messages, **kwargs)
+                call = self._backends[i].ainvoke(messages, **kwargs)
+                if self._timeout_s is None:
+                    return await call
+                # asyncio cancels the coroutine, so this deadline really stops it.
+                return await asyncio.wait_for(call, self._timeout_s)
+            except TimeoutError as exc:
+                last = exc
+                continue
             except BudgetExhausted as exc:
                 last = exc
                 self._active = max(self._active, i + 1)

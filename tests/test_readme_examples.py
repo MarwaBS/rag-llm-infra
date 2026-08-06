@@ -1,8 +1,8 @@
 """The README's request bodies and relative links are executed, not decorative.
 
-A reader copy-pastes them. Nothing else in the suite reads the README, so a
-payload that stops matching the request models, or a link to a file that has been
-renamed, ships without a gate noticing.
+A reader copy-pastes them. Nothing else in the suite reads the README. A payload
+that stops matching the request models, or a link to a renamed file, would
+otherwise ship without a gate noticing.
 """
 
 from __future__ import annotations

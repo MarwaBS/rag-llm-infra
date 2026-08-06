@@ -87,7 +87,9 @@ try:
     from .evidence_index import FAISS_AVAILABLE as _FAISS_AVAILABLE
 
     FAISS_AVAILABLE: bool = _FAISS_AVAILABLE
-except Exception:  # pragma: no cover - defensive
+except ImportError:  # pragma: no cover - defensive
+    # Only a missing module reads as "FAISS is unavailable". A broken install
+    # raising something else is a real fault and must surface.
     FAISS_AVAILABLE = False
 
 if FAISS_AVAILABLE:
@@ -125,6 +127,14 @@ class VectorStoreProtocol(Protocol):
 
     def search(self, queries: NDArrayF32, k: int) -> tuple[NDArrayF32, NDArrayI64]:
         """Return `(distances, indices)` arrays of shape `(Nq, min(k, size))`.
+
+        Ties: each backend orders equal scores its own way, and they do not
+        agree — NumPy breaks them on the lower document index, FAISS and Qdrant
+        do not. Swapping backends can therefore reorder equally-scoring
+        documents. What every backend does guarantee is repeatability: the same
+        store and query return the same rows in the same order, in this process
+        and the next. Where more documents share the boundary score than there
+        are slots left, which of them appear is unspecified.
 
         A store cannot return more results than it holds. When `k > size` every
         backend truncates to `size` rather than padding, so the row width is
@@ -262,8 +272,11 @@ class NumpyVectorStore:
         top_idx = np.argpartition(-similarities, k_eff - 1, axis=1)[:, :k_eff]
         rows = np.arange(similarities.shape[0])[:, None]
         top_scores = similarities[rows, top_idx]
-        # Sort each row descending by score
-        order = np.argsort(-top_scores, axis=1)
+        # lexsort's last key is the primary one: score descending, then the
+        # lower document index. `argsort` defaults to quicksort, which is not
+        # stable, so equal scores would come back in whatever order the
+        # partition happened to leave them in.
+        order = np.lexsort((top_idx, -top_scores), axis=1)
         sorted_scores = np.take_along_axis(top_scores, order, axis=1)
         sorted_indices = np.take_along_axis(top_idx, order, axis=1)
         return sorted_scores.astype("float32"), sorted_indices.astype("int64")
@@ -283,11 +296,21 @@ class NumpyVectorStore:
 class QdrantVectorStore:
     """Real Qdrant backend against `qdrant-client`.
 
-    Defaults to `QdrantClient(":memory:")` which runs a full in-process
-    Qdrant instance — same code path as a managed Qdrant, no external
-    server needed for tests. Production callers can point at a managed
-    endpoint by setting the `QDRANT_URL` environment variable (read on
-    construction).
+    **This store owns `collection` exclusively.** `add()` replaces the index, so
+    it deletes and recreates that collection. Point two stores at one name and
+    the second `add()` destroys the first one's vectors. The name is therefore
+    required and has no default: a shared endpoint plus a default name is a
+    collision nobody chose.
+
+    **This backend can return `-1` index and `-1.0` score.** `search` answers a
+    batch as one rectangular array. A row with fewer hits than asked for is
+    therefore padded, not truncated. That happens when the collection changes
+    between the count and the query. Filter on `index >= 0`. FAISS and NumPy
+    never pad.
+
+    Defaults to `QdrantClient(":memory:")`, a full in-process Qdrant — the same
+    code path as a managed one, with no server to run for tests. Set `QDRANT_URL`
+    to point at a managed endpoint; it is read on construction.
 
     A third backend behind the same Protocol, so the swap path is executed
     rather than merely described.
@@ -295,7 +318,7 @@ class QdrantVectorStore:
 
     backend_name = "qdrant"
 
-    def __init__(self, url: str | None = None, collection: str = "evidence") -> None:
+    def __init__(self, collection: str, url: str | None = None) -> None:
         if not QDRANT_AVAILABLE:
             raise RuntimeError(
                 "QdrantVectorStore requires `qdrant-client`. "
@@ -313,14 +336,13 @@ class QdrantVectorStore:
         else:
             self._client = QdrantClient(url=self._url)
         self._dim: int | None = None
-        self._size: int = 0
         # __version__ is a module attribute, not a class attribute.
         import qdrant_client as _qc
 
         self.backend_version = getattr(_qc, "__version__", "unknown")
 
     def _ensure_collection(self, dim: int) -> None:
-        """Create or recreate the collection with cosine distance.
+        """Create or recreate the owned collection with cosine distance.
 
         Uses `delete_collection` + `create_collection` instead of the
         deprecated `recreate_collection` (qdrant-client >= 1.12).
@@ -360,7 +382,6 @@ class QdrantVectorStore:
                     for i in range(normed.shape[0])
                 ],
             )
-        self._size = int(normed.shape[0])
 
     def search(self, queries: NDArrayF32, k: int) -> tuple[NDArrayF32, NDArrayI64]:
         if self._dim is None:
@@ -370,12 +391,13 @@ class QdrantVectorStore:
         queries = _as_2d_float32(queries, "queries")
         if queries.shape[1] != self._dim:
             raise ValueError(f"query dim {queries.shape[1]} != index dim {self._dim}")
-        if self._size == 0:
+        held = self.size
+        if held == 0:
             return _empty_result(queries.shape[0])
         q_norms = np.linalg.norm(queries, axis=1, keepdims=True)
         q_norms[q_norms == 0] = 1.0
         normed_queries = queries / q_norms
-        k_eff = min(k, self._size)
+        k_eff = min(k, held)
 
         # Batched search — a single HTTP round-trip for every query at once.
         # Looping `query_points` once per query adds up to dozens of
@@ -408,7 +430,9 @@ class QdrantVectorStore:
         for hits in hit_lists:
             row_scores = [float(h.score) for h in hits]
             row_indices = [int(h.id) for h in hits]
-            # Pad to k_eff with sentinel values if Qdrant returned fewer hits.
+            # A batch answers as one rectangular array, so a short row is padded
+            # rather than the whole batch truncated to the shortest. Index -1
+            # marks the padding; see the class docstring.
             while len(row_scores) < k_eff:
                 row_scores.append(-1.0)
                 row_indices.append(-1)
@@ -420,7 +444,15 @@ class QdrantVectorStore:
 
     @property
     def size(self) -> int:
-        return self._size
+        """Counted in the collection, not remembered locally.
+
+        A local count goes stale the moment anything else writes, and `search`
+        derives its row width from this, so a stale number pads the answer with
+        sentinel indices. Costs one round-trip.
+        """
+        if self._dim is None:
+            return 0
+        return int(self._client.count(collection_name=self._collection).count)
 
     @property
     def is_native(self) -> bool:
@@ -433,10 +465,11 @@ class QdrantVectorStore:
             except Exception as exc:  # pragma: no cover - defensive
                 logger.warning("Qdrant reset failed: %s", exc)
         self._dim = None
-        self._size = 0
 
 
-def get_vector_store(backend: str = "auto") -> VectorStoreProtocol:
+def get_vector_store(
+    backend: str = "auto", *, collection: str | None = None
+) -> VectorStoreProtocol:
     """Return a configured `VectorStoreProtocol` instance.
 
     `backend` values:
@@ -444,9 +477,13 @@ def get_vector_store(backend: str = "auto") -> VectorStoreProtocol:
       - "faiss"     → FAISS, error if not installed
       - "numpy"     → NumPy fallback (always available)
       - "qdrant"    → real Qdrant backend via qdrant-client (embedded or
-                      managed, depending on QDRANT_URL env)
+                      managed, depending on QDRANT_URL env). Needs `collection`,
+                      which that store replaces on every `add()` and therefore
+                      owns.
     """
     backend_normalized = (backend or "auto").lower().strip()
+    if collection is not None and backend_normalized != "qdrant":
+        raise ValueError(f"collection= applies to qdrant, not {backend_normalized!r}")
     if backend_normalized == "auto":
         if FAISS_AVAILABLE:
             return FAISSVectorStore()
@@ -456,7 +493,12 @@ def get_vector_store(backend: str = "auto") -> VectorStoreProtocol:
     if backend_normalized == "numpy":
         return NumpyVectorStore()
     if backend_normalized == "qdrant":
-        return QdrantVectorStore()
+        if collection is None:
+            raise ValueError(
+                "qdrant needs collection=: add() replaces that collection's "
+                "contents, so the store must own the name it is given."
+            )
+        return QdrantVectorStore(collection=collection)
     raise ValueError(
         f"Unknown vector_store_backend={backend!r}. "
         "Valid: auto | faiss | numpy | qdrant"
