@@ -1,9 +1,8 @@
 """The shipped version is declared once in effect, and it is documented.
 
 `pyproject.toml` and `__init__.py` each carry the version as a literal, and the
-release workflow only compares the tag against `pyproject.toml`. Nothing tied the
-two together, so twenty commits of public-surface change built a second, different
-`0.1.2` under a version already on PyPI.
+release workflow compares the tag against `pyproject.toml` alone. Without these
+two assertions the wheel and `__version__` can ship a release apart.
 """
 
 import re

@@ -194,10 +194,9 @@ class TestEmbeddingEngine:
         assert eng.get_stats()["cache_hits"] == 1
 
     def test_duplicate_texts_in_one_batch_encoded_once(self):
-        """Regression: a text repeated within a single embed_batch used to be
-        re-encoded once per occurrence (dedup happened only against the cache, not
-        within the batch). Identical misses must collapse to one encode, and every
-        occurrence must still receive the (identical) vector."""
+        """Dedup runs within the batch, not only against the cache: identical
+        misses collapse to one encode and every occurrence still receives the
+        same vector."""
         fake = _FakeEmbedder()
         from rag_llm_infra.evidence_index import EmbeddingEngine
 
@@ -211,9 +210,8 @@ class TestEmbeddingEngine:
         assert np.array_equal(out[0], out[3])
 
     def test_cache_key_is_case_and_space_sensitive(self):
-        """Regression: the key used to lowercase + collapse whitespace, so "US"
-        and "us" collided and the second lookup returned the WRONG vector. They
-        must both be encoded and yield distinct embeddings."""
+        """The key is the text verbatim. Folding case or whitespace would let
+        "US" and "us" collide and serve one the other's vector."""
         fake = _FakeEmbedder()
         from rag_llm_infra.evidence_index import EmbeddingEngine
 
@@ -332,9 +330,8 @@ class TestMemoryPressureTrim:
         eng.embed_batch(["trigger"])  # trips the pressure check
         assert eng._max_cache_size == 100  # max(100, int(150 * 0.5))
         assert eng.get_stats()["cache_size"] == 100  # 50 oldest trimmed, +1, -1
-        # Behavioral proof of insertion-order eviction: the OLDEST entry was
-        # evicted (re-embedding it costs a fresh encode), the NEWEST survived
-        # (re-embedding it is a pure cache hit).
+        # Eviction is insertion-ordered: re-embedding the oldest entry costs a
+        # fresh encode, the newest is a pure cache hit.
         encoded_before = fake.total_encoded
         eng.embed_batch(["pressure text 0"])  # oldest -> evicted -> re-encoded
         assert fake.total_encoded == encoded_before + 1

@@ -3,8 +3,7 @@
 `_STOP` decides which of an answer's words carry a groundable claim, so every
 score depends on its exact membership. It is a judgement call with no derivation
 behind it — closed-class English function words — so it is pinned rather than
-recomputed. Twenty-seven of its forty entries could be deleted with the whole
-suite, both eval gates and the example still green.
+recomputed. Most of it can leave without moving either eval gate's score.
 """
 
 import pytest

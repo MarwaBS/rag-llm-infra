@@ -7,15 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.3] - unreleased
 
-Every gate on this release has been shown to go red. `tests/mutations.json`
-registers a defect per guard and `scripts/replay_mutations.py` applies each one
-in turn in CI; a guard that survives its own defect fails the build.
+Every CI gate that reads a number out of this code has been shown to go red.
+`tests/mutations.json` registers the defects, `scripts/replay_mutations.py`
+applies each one in turn in CI, and a test fails the build if the registry loses
+an entry or if a scoring gate appears in CI with nothing registered against it.
+The lint, type-check and build steps run third-party tools over the tree and are
+not in the registry; `example.py` exits on an exception rather than on a score.
 
 ### Fixed
 - **`OpenAIBackend.close()` closed nothing on the async client.** `AsyncOpenAI.close`
   is a coroutine function, so calling it from a sync method discarded the
   coroutine and left the httpx pool open. `close()` now handles the sync client
-  only and **`aclose()` is added** for the async one.
+  only and **`aclose()` is added** for the async one. Both propagate a failure to
+  close instead of swallowing it, so `close()` can now raise where it could not.
 - **The generation gate could not fail.** Its faithful fixture was a retrieved
   document verbatim, scoring `1.000` by set identity whatever the metric did.
   Both sides are now populations of paraphrases and of fluent unsupported

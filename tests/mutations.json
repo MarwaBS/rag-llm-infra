@@ -232,6 +232,38 @@
       "find": "        \"the\",\n",
       "replace": "        \"the\",\n        \"faiss\",\n",
       "gates": ["pytest tests/test_stop_words.py"]
+    },
+    {
+      "id": "M30",
+      "why": "the embedder collapses into few buckets, so unrelated documents collide and ranking degrades",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "% EMBED_DIM\n",
+      "replace": "% 8\n",
+      "gates": ["python -m eval.retrieval_eval"]
+    },
+    {
+      "id": "M31",
+      "why": "the embedder stops folding case, so a capitalised token no longer matches its query",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "text.lower()",
+      "replace": "text",
+      "gates": ["pytest tests/test_demo_embedder.py"]
+    },
+    {
+      "id": "M32",
+      "why": "the embedder records presence instead of term frequency, so repetition stops counting",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "vecs[row, bucket] += 1.0",
+      "replace": "vecs[row, bucket] = 1.0",
+      "gates": ["pytest tests/test_demo_embedder.py"]
+    },
+    {
+      "id": "M33",
+      "why": "the embedder uses the salted built-in hash, so vectors stop being reproducible across processes",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "int(hashlib.md5(token.encode()).hexdigest(), 16)",
+      "replace": "hash(token)",
+      "gates": ["pytest tests/test_demo_embedder.py"]
     }
   ]
 }

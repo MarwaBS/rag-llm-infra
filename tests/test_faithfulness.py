@@ -5,8 +5,8 @@ union of the contexts — a content token being a lowercase `[a-z0-9]+` run of a
 least two characters that is not a stop word — and 1.0 for an answer with none.
 
 Every expectation below is that fraction worked out from the definition, not
-read off a run. `0 < score < 1` is satisfied by metrics that have stopped reading
-the evidence at all; two such survived this file before it was exact.
+read off a run. `0 < score < 1` is satisfied by a metric that has stopped reading
+the evidence at all; an exact fraction is not.
 """
 
 from fractions import Fraction
