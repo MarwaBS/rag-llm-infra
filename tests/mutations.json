@@ -474,6 +474,38 @@
       "gates": ["pytest tests/test_qdrant_ownership.py"]
     },
     {
+      "id": "M60",
+      "why": "the index route loses its credential check, so anyone reaching the port can replace the corpus",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "@app.post(\"/index\", status_code=201, dependencies=[Depends(require_api_key)])",
+      "replace": "@app.post(\"/index\", status_code=201)",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M61",
+      "why": "an unconfigured server serves openly instead of refusing",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "    if not expected:\n        raise HTTPException(status_code=503, detail=\"RAG_API_KEY is not configured\")",
+      "replace": "    if not expected:\n        return",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M62",
+      "why": "the request body loses its bound, so one call can hold as much memory as it likes",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "        if int(declared) > _max_body_bytes():",
+      "replace": "        if False:",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M63",
+      "why": "the build context stops denying by default, so the virtualenv and git history reach the image",
+      "file": ".dockerignore",
+      "find": "*\n\n!pyproject.toml",
+      "replace": "!pyproject.toml",
+      "gates": ["pytest tests/test_build_context.py"]
+    },
+    {
       "id": "C1",
       "expect": "survives",
       "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",

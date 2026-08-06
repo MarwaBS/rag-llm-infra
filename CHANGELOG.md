@@ -28,6 +28,37 @@ mutation that stops the file loading is rejected rather than credited.
 Lint, type-check, spell check and build run third-party tools over the tree and
 carry no registered defect. `example.py` exits on an exception, not on a score.
 
+### Security
+- **`/index` and `/query` require a credential.** They read `X-API-Key` and
+  compare it against `RAG_API_KEY` with `secrets.compare_digest`. With that
+  variable unset they answer 503, so no configuration serves openly — before
+  this, anyone who reached the port could replace the corpus and read it back.
+  `/health` stays open for container probes.
+- **One bound on request size.** A body over `RAG_MAX_BODY_BYTES` (1 MiB) is
+  refused with 413 before it is read, and a POST with no `Content-Length` with
+  411. Measured before: a 20 MB body was accepted. Document count and length need
+  no separate limits — they cannot exceed what the body bound admits, and `k` was
+  already capped at the corpus size.
+- **`pip-audit --strict` runs in CI and on the release path.** Its first run
+  found four advisories: `starlette` 1.2.1 (PYSEC-2026-248, -249), reached
+  through `fastapi`, and `h2` 4.3.0 (CVE-2026-71554), reached through
+  `qdrant-client`'s `httpx[http2]`. Both now carry a floor in the extra that
+  pulls them.
+- **Every GitHub Action is pinned to a commit**, not a tag a publisher can
+  repoint at other code.
+
+### Added
+- **`.dockerignore`, denying by default.** `COPY . .` was admitting a 315 MiB
+  virtualenv and the git history. The rules admit `pyproject.toml`, `README.md`,
+  `LICENSE` and `src/` and nothing else; a test assembles a directory from those
+  paths alone and builds the wheel in it, so a rule set too tight fails here
+  rather than in the image.
+- **CI builds the image, starts it, and exercises it.** The `Dockerfile`'s `CMD`
+  and `HEALTHCHECK` were tracked text no workflow had run. The job now asserts an
+  unauthenticated `/index` gets 401, that an authenticated index-then-query
+  returns the expected document, and that the container's own health check
+  reaches `healthy`.
+
 ### Removed — breaking
 - **`QdrantVectorStore` no longer defaults its collection to `"evidence"`.** The
   name is now the first, required argument, and `get_vector_store("qdrant")`

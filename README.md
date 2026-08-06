@@ -40,17 +40,20 @@ for `get_llm("openai")`.
 
 ```bash
 pip install "rag-llm-infra[serve]"
-uvicorn rag_llm_infra.serve:app          # or: docker build -t rag-llm-infra . && docker run -p 8000:8000 rag-llm-infra
+export RAG_API_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+uvicorn rag_llm_infra.serve:app
+# or: docker build -t rag-llm-infra . && docker run -p 8000:8000 -e RAG_API_KEY=$RAG_API_KEY rag-llm-infra
 ```
 
-> `/index` and `/query` are **unauthenticated**. `uvicorn` defaults to
-> `127.0.0.1` unless `--host` or `UVICORN_HOST` says otherwise; the container
-> passes `--host 0.0.0.0` and publishes 8000, so put your own auth in front of
-> the container — see [SECURITY.md](SECURITY.md).
+> `/index` and `/query` require `X-API-Key`, and answer 503 while `RAG_API_KEY`
+> is unset — there is no open mode. `/health` stays open for container probes.
+> Bodies over 1 MiB are refused. `uvicorn` binds `127.0.0.1` unless `--host` or
+> `UVICORN_HOST` says otherwise; the container passes `--host 0.0.0.0` and
+> publishes 8000. One shared key, no rate limiting — see [SECURITY.md](SECURITY.md).
 
 ```bash
-curl -XPOST localhost:8000/index -d '{"documents":["FAISS is in-process vector search","Qdrant is a vector database"]}' -H 'content-type: application/json'
-curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'content-type: application/json'
+curl -XPOST localhost:8000/index -d '{"documents":["FAISS is in-process vector search","Qdrant is a vector database"]}' -H 'content-type: application/json' -H "X-API-Key: $RAG_API_KEY"
+curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'content-type: application/json' -H "X-API-Key: $RAG_API_KEY"
 ```
 
 ## What's inside

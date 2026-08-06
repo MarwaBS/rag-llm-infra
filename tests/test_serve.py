@@ -6,11 +6,13 @@ from fastapi.testclient import TestClient
 import rag_llm_infra.serve as serve
 from rag_llm_infra.serve import app
 
-client = TestClient(app)
+API_KEY = "test-key"
+client = TestClient(app, headers={"X-API-Key": API_KEY})
 
 
 @pytest.fixture(autouse=True)
-def _reset_index():
+def _configured_and_empty(monkeypatch):
+    monkeypatch.setenv("RAG_API_KEY", API_KEY)
     serve._index = None
     yield
     serve._index = None

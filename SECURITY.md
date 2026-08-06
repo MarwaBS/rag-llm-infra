@@ -28,13 +28,20 @@ Qdrant backend connects only to the URL the caller supplies.
 
 Two caveats qualify that.
 
-**`rag_llm_infra.serve` has no authentication.** Installed with the `serve`
-extra and used as the `Dockerfile`'s entrypoint, it exposes `/health`, `/index`
-and `/query`. Any caller who can reach the port can replace the whole corpus via
-`/index` and read back document text via `/query`; there is no key, no rate
-limit and no bound on request size. It is a reference wiring of the library's
-parts, not a hardened service — put it behind your own authentication, or do not
-expose it.
+**`rag_llm_infra.serve` authenticates with a shared key, and nothing else.**
+Installed with the `serve` extra and used as the `Dockerfile`'s entrypoint, it
+exposes `/health`, `/index` and `/query`. The two POST routes require `X-API-Key`
+to equal `RAG_API_KEY`, compared with `secrets.compare_digest`, and answer 503
+when that variable is unset — there is no configuration in which they serve
+openly. `/health` is unauthenticated and returns only `{"status": "ok"}`.
+
+Request bodies over `RAG_MAX_BODY_BYTES` (1 MiB by default) are refused with 413
+before being read, and a POST with no `Content-Length` with 411.
+
+What it still does not have: rate limiting, per-caller identity, key rotation,
+audit logging, or TLS. One key holder is every key holder, and `/index` replaces
+the whole corpus. It is a reference wiring of the library's parts, not a
+multi-tenant service.
 
 **The JSON log formatter does not redact.** `log_config` forwards the fields a
 caller attaches via `extra={...}` into the log line verbatim. It drops names

@@ -21,9 +21,9 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -43,6 +43,9 @@ jobs:
 
       - name: Spell check (codespell)
         run: codespell
+
+      - name: Dependency CVE gate (pip-audit)
+        run: pip-audit --strict --progress-spinner off
 
       - name: Build wheel + sdist
         run: python -m build
@@ -65,3 +68,63 @@ jobs:
       # registered defect is applied in turn and must turn a gate red.
       - name: Replay the mutation registry
         run: python -m scripts.replay_mutations
+
+  # The Dockerfile shipped a CMD and a HEALTHCHECK that no workflow had ever
+  # executed. Building proves it compiles; only starting it and calling the API
+  # proves the image serves.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Build the image
+        run: docker build -t rag-llm-infra:ci .
+
+      - name: The image is not carrying the build context
+        run: |
+          # Before .dockerignore, `COPY . .` admitted a 315 MiB virtualenv.
+          size="$(docker image inspect rag-llm-infra:ci --format '{{.Size}}')"
+          echo "image size: $((size / 1024 / 1024)) MiB"
+          test "$size" -lt 838860800 || { echo "::error::image over 800 MiB"; exit 1; }
+
+      - name: Start it
+        run: |
+          docker run -d --name rli -p 8000:8000 -e RAG_API_KEY=ci-key rag-llm-infra:ci
+          for i in $(seq 1 30); do
+            if curl -fsS localhost:8000/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS localhost:8000/health
+
+      - name: The running image enforces the credential
+        run: |
+          code="$(curl -s -o /dev/null -w '%{http_code}' -XPOST localhost:8000/index \
+            -H 'content-type: application/json' -d '{"documents":["x"]}')"
+          test "$code" = "401" || { echo "::error::unauthenticated /index got $code"; exit 1; }
+
+      - name: The running image answers a real query
+        run: |
+          set -euo pipefail
+          auth='X-API-Key: ci-key'
+          curl -fsS -XPOST localhost:8000/index -H "$auth" \
+            -H 'content-type: application/json' \
+            -d '{"documents":["FAISS is in-process vector search","Qdrant is a vector database"]}'
+          body="$(curl -fsS -XPOST localhost:8000/query -H "$auth" \
+            -H 'content-type: application/json' -d '{"query":"vector search","k":1}')"
+          echo "$body"
+          echo "$body" | grep -q "in-process vector search" \
+            || { echo "::error::the image did not retrieve the expected document"; exit 1; }
+
+      - name: The container reports itself healthy
+        run: |
+          for i in $(seq 1 30); do
+            state="$(docker inspect --format '{{.State.Health.Status}}' rli)"
+            [ "$state" = "healthy" ] && exit 0
+            [ "$state" = "unhealthy" ] && { docker logs rli; exit 1; }
+            sleep 2
+          done
+          echo "::error::HEALTHCHECK never reported healthy"; docker logs rli; exit 1
+
+      - name: Stop it
+        if: always()
+        run: docker rm -f rli || true

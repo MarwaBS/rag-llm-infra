@@ -30,11 +30,23 @@ def test_the_curl_bodies_were_found_at_all() -> None:
     assert paths == ["/index", "/query"], paths
 
 
+def test_every_documented_call_carries_the_credential() -> None:
+    """A copy-pasteable request without the key would 401, and a reader would
+    conclude the service is broken rather than that they skipped a step."""
+    posts = [ln for ln in README.splitlines() if "curl -XPOST" in ln]
+    assert posts
+    assert not [ln for ln in posts if "X-API-Key" not in ln]
+
+
 @pytest.mark.parametrize("path,body", _payloads(), ids=lambda v: str(v)[:20])
-def test_each_documented_request_body_is_accepted(path: str, body: dict) -> None:
+def test_each_documented_request_body_is_accepted(
+    path: str, body: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from rag_llm_infra import serve
 
-    with TestClient(serve.app) as client:
+    monkeypatch.setenv("RAG_API_KEY", "readme-key")
+    headers = {"X-API-Key": "readme-key"}
+    with TestClient(serve.app, headers=headers) as client:
         # /query needs a corpus, and the README's own /index call is what supplies it.
         for index_path, index_body in _payloads():
             if index_path == "/index":

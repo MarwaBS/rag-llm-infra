@@ -1,7 +1,8 @@
 """Pin the three boundaries SECURITY.md and the serve docstring describe.
 
-The endpoints take no credential. The JSON formatter does not redact. Neither
-importing the module nor serving any route configures logging or tracing.
+The endpoints refuse to answer without a credential. The JSON formatter does not
+redact. Neither importing the module nor serving any route configures logging or
+tracing.
 """
 
 import logging
@@ -24,9 +25,14 @@ def _reset_index():
     serve._index = None
 
 
-def test_index_and_query_accept_requests_with_no_credential() -> None:
-    assert client.post("/index", json={"documents": ["a document"]}).status_code == 201
-    assert client.post("/query", json={"query": "document"}).status_code == 200
+def test_neither_endpoint_answers_without_a_credential() -> None:
+    """With no `RAG_API_KEY` configured there is no open mode to fall into."""
+    assert client.post("/index", json={"documents": ["a document"]}).status_code == 503
+    assert client.post("/query", json={"query": "document"}).status_code == 503
+
+
+def test_health_stays_open_for_container_probes() -> None:
+    assert client.get("/health").status_code == 200
 
 
 # The package root is imported before the first snapshot: grpc and urllib3
