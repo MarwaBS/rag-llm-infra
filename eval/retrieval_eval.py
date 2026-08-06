@@ -14,9 +14,9 @@ order-insensitive, the "paraphrased" queries below (which reorder the document's
 tokens) are effectively token-set overlap, NOT semantics. So this gate measures
 the *retrieval mechanics* — does the store rank the right document top-1 — not
 semantic retrieval quality. Semantic quality depends on the real
-`EmbeddingEngine` (sentence-transformers), which needs a model download and is
-out of scope for a hermetic CI gate; evaluate that separately with a labelled
-set and the real embedder.
+`EmbeddingEngine` (sentence-transformers). That needs a model download, so it is
+out of scope for a hermetic CI gate. Evaluate it separately with a labelled set
+and the real embedder.
 """
 
 from __future__ import annotations

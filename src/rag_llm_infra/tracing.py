@@ -121,11 +121,6 @@ def current_trace_context() -> dict[str, str]:
     return {"trace_id": "", "span_id": ""}
 
 
-# ---------------------------------------------------------------------------
-# No-op fallback so callers don't need to guard every `with tracer.start...`
-# ---------------------------------------------------------------------------
-
-
 class _NoOpSpan:
     def __enter__(self) -> _NoOpSpan:
         return self

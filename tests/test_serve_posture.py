@@ -1,6 +1,7 @@
-"""Pin the three boundaries SECURITY.md and the serve docstring describe: the
-endpoints take no credential, the JSON formatter does not redact, and neither
-importing the module nor serving any of its routes configures logging or tracing.
+"""Pin the three boundaries SECURITY.md and the serve docstring describe.
+
+The endpoints take no credential. The JSON formatter does not redact. Neither
+importing the module nor serving any route configures logging or tracing.
 """
 
 import logging

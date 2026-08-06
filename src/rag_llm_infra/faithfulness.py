@@ -1,13 +1,13 @@
 """Groundedness (faithfulness) metric for RAG output.
 
 `groundedness(answer, contexts)` returns the fraction of the answer's content
-words that are supported by the retrieved context — a cheap, deterministic
-faithfulness signal you can run on every generation and gate CI on.
+words that the retrieved context supports. It is cheap and deterministic, so it
+can run on every generation and hold a CI gate.
 
-It is a *lexical* proxy: it catches answers that introduce vocabulary absent from
-the evidence (a common hallucination signature). It does not judge semantics, so
-it has three known blind spots by construction — treat it as a cheap tripwire, not
-a faithfulness guarantee, and pair it with an LLM-judge for nuanced cases:
+It is a *lexical* proxy. It catches answers that introduce vocabulary absent from
+the evidence, a common hallucination signature. It does not judge semantics, so
+it has three blind spots by construction. Treat it as a cheap tripwire, not a
+faithfulness guarantee, and pair it with an LLM-judge for nuanced cases:
 
   - **Negation-blind.** "Paris is not the capital" scores the same as "Paris is
     the capital" — `not` is a closed-class stop word, so flipping the claim's

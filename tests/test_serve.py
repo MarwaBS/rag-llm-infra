@@ -63,7 +63,7 @@ def test_reindex_with_smaller_corpus_never_500s() -> None:
 
 
 def test_the_served_version_is_the_package_version() -> None:
-    # A hardcoded literal here drifted from the released package once already.
+    # The served version is read from the package, not written out here.
     import rag_llm_infra
 
     assert app.version == rag_llm_infra.__version__

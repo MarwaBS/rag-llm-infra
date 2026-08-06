@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.3] - unreleased
 
-Every CI gate that reads a number out of this code has been shown to go red.
-`tests/mutations.json` registers the defects, `scripts/replay_mutations.py`
-applies each one in turn in CI, and a test fails the build if the registry loses
-an entry or if a scoring gate appears in CI with nothing registered against it.
-The lint, type-check and build steps run third-party tools over the tree and are
-not in the registry; `example.py` exits on an exception rather than on a score.
+Every CI gate that reads a number out of this code has been shown to go red. So
+has the replay that decides those verdicts.
+
+`tests/mutations.json` registers the defects. `scripts/replay_mutations.py`
+applies each one in turn. A test fails the build if the registry loses an entry,
+or if a scoring gate appears in the workflow with nothing registered against it —
+the workflow is parsed as YAML, so a `run:` block scalar cannot hide one.
+
+The replay carries defects of its own and a control that must survive. A runner
+stuck on green fails on the defects. One stuck on red fails on the control.
+
+Lint, type-check and build run third-party tools over the tree and are not in the
+registry. `example.py` exits on an exception, not on a score.
 
 ### Fixed
 - **`OpenAIBackend.close()` closed nothing on the async client.** `AsyncOpenAI.close`
@@ -32,6 +39,14 @@ not in the registry; `example.py` exits on an exception rather than on a score.
 - **`groundedness` is pinned to exact fractions** taken from its written
   definition rather than to `0 < score < 1`, which a metric that has stopped
   reading the evidence also satisfies.
+- **The replay credited reds it had not earned.** A mutation that broke the
+  import reddened every gate that touched the file without removing any
+  behaviour, and a gate that could not run at all counted the same as a test that
+  failed. The mutated file must now still import, and only pytest's exit code for
+  a failed test earns credit — 2, 3 and 4 do not.
+- **The demo embedder had no test.** Both eval gates, `example.py` and the
+  serving demo embed through it, and case folding, term frequency, digit tokens
+  and cross-process reproducibility could each be removed with every gate green.
 
 ### Changed
 - `requires-python` is bounded at both ends (`>=3.12,<3.14`) and CI runs both

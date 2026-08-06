@@ -26,10 +26,6 @@ from rag_llm_infra.llm_protocol import (
 )
 
 
-# ---------------------------------------------------------------------------
-# MockBackend — the workhorse for every other test in the repo that needs
-# a deterministic LLM. Must be boring and reliable.
-# ---------------------------------------------------------------------------
 class TestMockBackend:
     def test_default_response(self) -> None:
         llm = MockBackend()
@@ -75,10 +71,6 @@ class TestMockBackend:
         assert llm.invoke([], temperature=0.7, max_tokens=100) == "ok"
 
 
-# ---------------------------------------------------------------------------
-# AnthropicBackend — contract stub. The only wrong thing it can do is
-# silently succeed, so we test that it raises loudly with migration help.
-# ---------------------------------------------------------------------------
 class TestAnthropicBackend:
     def test_invoke_raises_not_implemented(self) -> None:
         llm = AnthropicBackend()
@@ -109,8 +101,8 @@ class TestAnthropicBackend:
         assert llm._model == "claude-sonnet-4-6"
 
     def test_referenced_adr_actually_exists(self) -> None:
-        """The stub's error and module docstring point at ADR-006; that file
-        must exist in the repo (it previously did not)."""
+        """The stub's error and module docstring point at ADR-006, so that file
+        must exist in the repo."""
         import rag_llm_infra
 
         repo_root = Path(rag_llm_infra.__file__).resolve().parents[2]
@@ -118,9 +110,6 @@ class TestAnthropicBackend:
         assert adr.exists(), f"referenced ADR missing: {adr}"
 
 
-# ---------------------------------------------------------------------------
-# OpenAIBackend — import-time tests only (no network), via a patched SDK.
-# ---------------------------------------------------------------------------
 class TestOpenAIBackend:
     def test_instantiation_with_patched_sdk(self) -> None:
         """Construct with a mocked openai module so the test is hermetic."""
@@ -154,8 +143,7 @@ class TestOpenAIBackend:
         return resp
 
     def test_invoke_extracts_assistant_text(self) -> None:
-        """invoke() must call the SDK and return choices[0].message.content —
-        previously this body had zero coverage, even against a mock."""
+        """invoke() calls the SDK and returns choices[0].message.content."""
         fake_openai = MagicMock()
         fake_openai.__version__ = "1.109.1"
         with patch.dict("sys.modules", {"openai": fake_openai}):
@@ -185,8 +173,8 @@ class TestOpenAIBackend:
             )
 
     def test_clients_constructed_lazily(self) -> None:
-        """Neither SDK client is built until first use; a sync call must not
-        spin up the async client (the old eager __init__ built both)."""
+        """Neither SDK client is built until first use, so a sync call must not
+        spin up the async one."""
         fake_openai = MagicMock()
         fake_openai.__version__ = "1.109.1"
         with patch.dict("sys.modules", {"openai": fake_openai}):
@@ -198,10 +186,6 @@ class TestOpenAIBackend:
             assert llm._aclient is None  # async client never touched
 
 
-# ---------------------------------------------------------------------------
-# Factory — get_llm routing is the only place call sites touch, so every
-# routing branch needs a test.
-# ---------------------------------------------------------------------------
 class TestFactory:
     def test_mock_routing(self) -> None:
         llm = get_llm(backend="mock")
@@ -254,10 +238,6 @@ class TestFactory:
         assert llm.invoke([]) == "forwarded"
 
 
-# ---------------------------------------------------------------------------
-# Protocol shape — if someone adds a field / method, this test flags the
-# drift instantly.
-# ---------------------------------------------------------------------------
 class TestProtocolShape:
     @pytest.mark.parametrize(
         "impl_cls",

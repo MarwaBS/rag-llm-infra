@@ -186,11 +186,11 @@ class TestLlmCall:
 
 
 def test_llm_call_reports_a_measured_latency(caplog) -> None:
-    """Line coverage of the timer is not assertion coverage: a constant is just
+    """Line coverage of the timer is not assertion coverage. A constant is just
     as covered. The body cannot take less than it slept or more than the wall
-    clock around it, and both of those are measured here rather than chosen —
-    which leaves a constant and a scaled reading nowhere to sit. The 1 ms is
-    clock granularity, not slack."""
+    clock around it. Both bounds are measured here, not chosen, which leaves a
+    constant and a scaled reading nowhere to sit. The 1 ms is clock granularity,
+    not slack."""
     import time as _time
 
     from rag_llm_infra.log_config import llm_call

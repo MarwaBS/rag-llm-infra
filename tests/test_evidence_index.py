@@ -118,9 +118,9 @@ class TestRWLock:
         assert sequence.index("write-end") < sequence.index("read")
 
     def test_writer_not_starved_by_continuous_readers(self):
-        """A waiting writer must not be starved by a stream of new readers
-        (writer preference). The old lock let new readers keep _readers > 0 so a
-        waiting writer never proceeded."""
+        """Writer preference: once a writer is waiting, a new reader queues
+        behind it. Without that, an unbroken stream of readers holds `_readers`
+        above zero and the writer never runs."""
         lock = RWLock()
         lock.acquire_read()  # an existing reader holds the lock
 
@@ -350,9 +350,9 @@ class TestMemoryPressureTrim:
         assert fake.total_encoded == encoded_before
 
     def test_pressure_poll_is_throttled_even_without_pressure(self, monkeypatch):
-        """Regression: the 30s throttle must reset on every check, not only when
-        pressure is found — otherwise psutil is polled on every call after the
-        first quiet 30s window."""
+        """The throttle timestamp resets on every check, not only when pressure
+        is found. Otherwise psutil is polled on every call once the first quiet
+        window has passed."""
         monkeypatch.setitem(CONFIG, "adaptive_cache", True)
         monkeypatch.setitem(CONFIG, "memory_warning_threshold", 0.8)
         import rag_llm_infra.evidence_index as ei

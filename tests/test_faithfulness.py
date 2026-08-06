@@ -1,8 +1,8 @@
 """The groundedness metric, pinned to exact values taken from its definition.
 
 `groundedness` is the fraction of the answer's content tokens present in the
-union of the contexts — a content token being a lowercase `[a-z0-9]+` run of at
-least two characters that is not a stop word — and 1.0 for an answer with none.
+union of the contexts. A content token is a lowercase `[a-z0-9]+` run of at least
+two characters that is not a stop word. An answer with none scores 1.0.
 
 Every expectation below is that fraction worked out from the definition, not
 read off a run. `0 < score < 1` is satisfied by a metric that has stopped reading

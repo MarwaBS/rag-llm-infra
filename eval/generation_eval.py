@@ -6,14 +6,14 @@ hallucinated (fluent, on-topic, asserting what the evidence does not).
 
     python -m eval.generation_eval
 
-Both populations are scored, and the gate is held by the worst case in each: the
-lowest faithful score must clear the floor, the highest hallucinated score must
-stay under the ceiling, and the two must stay a minimum distance apart. Floors
-come from `eval/eval_floors.json`, derived by `scripts/derive_eval_floors.py`.
+Both populations are scored. The worst case in each holds the gate. The lowest
+faithful score must clear the floor. The highest hallucinated score must stay
+under the ceiling. The two must stay a minimum distance apart. Floors come from
+`eval/eval_floors.json`, derived by `scripts/derive_eval_floors.py`.
 
 No fixture sits at 0.0 or 1.0. A fixture at a theoretical extreme scores the same
 under a metric that discriminates and one that has stopped, so it cannot tell
-them apart — `tests/test_generation_eval.py` pins that property.
+them apart. `tests/test_generation_eval.py` pins that property.
 """
 
 from __future__ import annotations

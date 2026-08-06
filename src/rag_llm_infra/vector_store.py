@@ -3,10 +3,9 @@ vector_store.py
 ---------------
 VectorStoreProtocol — a swappable embedding-index abstraction.
 
-This module defines the minimal surface area callers use against an
-embedding index, so that swapping the in-process FAISS index
-for a managed vector DB (Pinecone, Weaviate, Qdrant, pgvector) is a
-config change rather than a rewrite.
+The minimal surface area callers use against an embedding index. Swapping the
+in-process FAISS index for a managed vector DB (Pinecone, Weaviate, Qdrant,
+pgvector) is then a config change, not a rewrite.
 
 Three implementations ship:
 
@@ -55,10 +54,10 @@ type NDArrayI64 = npt.NDArray[np.int64]
 def _as_2d_float32(arr: Any, name: str, *, copy: bool = False) -> NDArrayF32:
     """Validate and coerce an embedding/query batch to an `(N, D)` float32 array.
 
-    Raises a clear `ValueError` for a non-2-D input or for non-finite values,
-    instead of letting an opaque `AxisError` (a 1-D `add`) or a silent NaN
-    (garbage scores) propagate into the backend. Pass `copy=True` when the caller
-    normalizes in place (FAISS) so the caller's own array is never mutated.
+    Raises `ValueError` for a non-2-D input or for non-finite values. Otherwise a
+    1-D `add` surfaces as an opaque `AxisError` and a NaN reaches the backend as
+    silent garbage scores. Pass `copy=True` when the caller normalizes in place
+    (FAISS) so the caller's own array is never mutated.
     """
     a = np.array(arr, dtype=np.float32) if copy else np.asarray(arr, dtype=np.float32)
     if a.ndim != 2:
@@ -74,9 +73,9 @@ def _as_2d_float32(arr: Any, name: str, *, copy: bool = False) -> NDArrayF32:
 
 
 def _empty_result(n_queries: int) -> tuple[NDArrayF32, NDArrayI64]:
-    """Per the documented contract, an empty store (`size == 0`) returns arrays of
-    width `min(k, size) == 0` on every backend, rather than each raising its own
-    error for a case the contract says is legal."""
+    """An empty store (`size == 0`) returns width `min(k, size) == 0` on every
+    backend. The contract says the case is legal, so no backend raises its own
+    error for it."""
     return (
         np.empty((n_queries, 0), dtype=np.float32),
         np.empty((n_queries, 0), dtype=np.int64),
@@ -108,9 +107,6 @@ except ImportError:  # pragma: no cover - exercised in envs without qdrant-clien
     qdrant_models = None  # type: ignore[assignment]
 
 
-# ---------------------------------------------------------------------------
-# Protocol — the surface area callers depend on
-# ---------------------------------------------------------------------------
 @runtime_checkable
 class VectorStoreProtocol(Protocol):
     """Minimal vector store contract for embedding retrieval.
@@ -131,9 +127,9 @@ class VectorStoreProtocol(Protocol):
     def search(self, queries: NDArrayF32, k: int) -> tuple[NDArrayF32, NDArrayI64]:
         """Return `(distances, indices)` arrays of shape `(Nq, min(k, size))`.
 
-        A store cannot return more results than it holds, so when `k > size`
-        every backend truncates to `size` (rather than padding) — the row width
-        is `min(k, size)` consistently across FAISS / NumPy / Qdrant. An empty
+        A store cannot return more results than it holds. When `k > size` every
+        backend truncates to `size` rather than padding, so the row width is
+        `min(k, size)` across FAISS, NumPy and Qdrant alike. An empty
         store (`size == 0`, e.g. built from a zero-row `add`) therefore returns
         `(Nq, 0)`-shaped arrays uniformly, not a backend-specific error. Calling
         `search` before any `add` is a different case — a programming error — and
@@ -160,9 +156,6 @@ class VectorStoreProtocol(Protocol):
         ...
 
 
-# ---------------------------------------------------------------------------
-# FAISS implementation — the production default when FAISS is installed
-# ---------------------------------------------------------------------------
 class FAISSVectorStore:
     """In-process FAISS `IndexFlatIP` over L2-normalized embeddings.
 
@@ -229,9 +222,6 @@ class FAISSVectorStore:
         self._index = None
 
 
-# ---------------------------------------------------------------------------
-# Numpy fallback — used when FAISS is not installed
-# ---------------------------------------------------------------------------
 class NumpyVectorStore:
     """Pure-numpy fallback. Stores `(N, D)` row-normalized matrix and runs
     cosine similarity via a single matmul — every query scores every vector,
@@ -291,9 +281,6 @@ class NumpyVectorStore:
         self._matrix = None
 
 
-# ---------------------------------------------------------------------------
-# Qdrant implementation — proves the abstraction's swap-ability end-to-end
-# ---------------------------------------------------------------------------
 class QdrantVectorStore:
     """Real Qdrant backend against `qdrant-client`.
 
@@ -450,9 +437,6 @@ class QdrantVectorStore:
         self._size = 0
 
 
-# ---------------------------------------------------------------------------
-# Factory — env-selected implementation
-# ---------------------------------------------------------------------------
 def get_vector_store(backend: str = "auto") -> VectorStoreProtocol:
     """Return a configured `VectorStoreProtocol` instance.
 

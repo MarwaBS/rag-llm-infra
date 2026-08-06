@@ -33,6 +33,13 @@ def test_the_control_shows_different_text_does_move_the_vector() -> None:
     assert not np.array_equal(embed([_TEXT])[0], embed(["cartography"])[0])
 
 
+def test_digits_are_content() -> None:
+    """The token pattern is `[a-z0-9]+`. Without the digits a purely numeric
+    token disappears and "v2" and "v3" become the same token."""
+    assert embed(["2024"])[0].sum() == 1.0
+    assert not np.array_equal(embed(["v2"])[0], embed(["v3"])[0])
+
+
 def test_a_repeated_token_weighs_more_than_a_single_one() -> None:
     once = embed(["faiss"])[0]
     twice = embed(["faiss faiss"])[0]

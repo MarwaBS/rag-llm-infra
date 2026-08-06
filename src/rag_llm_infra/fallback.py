@@ -2,11 +2,11 @@
 
 `FallbackLLM` wraps an ordered list of `LLMProtocol` backends and advances to the
 next one when the current backend raises a *retryable* error. It does NOT track
-spend itself — budget accounting lives at the service layer (see ADR-006); this
-class only *reacts* to a `BudgetExhausted` signal a backend raises, by tripping
-the chain forward **permanently** (the exhausted provider is skipped for the rest
-of this object's life). Other retryable exceptions are transient: the next
-backend is tried for that call only.
+spend itself. Budget accounting lives at the service layer (see ADR-006). This
+class only *reacts* to a `BudgetExhausted` a backend raises, and trips the chain
+forward **permanently** — that provider is skipped for the rest of this object's
+life. Other retryable exceptions are transient: the next backend is tried for
+that call only.
 
 Programming/contract errors (e.g. `TypeError`, `NotImplementedError`) are NOT
 retryable — they propagate, so a misconfigured chain fails loudly instead of
@@ -19,12 +19,13 @@ Conforms to `LLMProtocol`, so it is a drop-in anywhere a single backend is used:
     llm = FallbackLLM([get_llm("openai"), get_llm("mock")])
 
 Thread safety: a single `FallbackLLM` is safe to share across threads. The only
-mutable state is `_active` (the budget-exhaustion high-water mark), which advances
-*monotonically* — concurrent calls can never move it backward, and the underlying
-backends do the real work outside any lock, so there is no added contention. The
-benign cost of being lock-free is that two threads racing on the same just-exhausted
-backend may each discover the `BudgetExhausted` once before `_active` settles; the
-chain still trips forward correctly.
+mutable state is `_active`, the budget-exhaustion high-water mark. It advances
+*monotonically*, so concurrent calls can never move it backward. The backends do
+the real work outside any lock, so there is no added contention.
+
+Being lock-free has one benign cost. Two threads racing on the same
+just-exhausted backend may each see the `BudgetExhausted` once before `_active`
+settles. The chain still trips forward correctly.
 """
 
 from __future__ import annotations

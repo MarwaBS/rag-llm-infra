@@ -43,11 +43,6 @@ ENV: str = os.getenv("ENV", "dev").lower()
 _CONFIGURED = False
 
 
-# ---------------------------------------------------------------------------
-# JSON formatter
-# ---------------------------------------------------------------------------
-
-
 class _JsonFormatter(logging.Formatter):
     """Emit each record as a single-line JSON object."""
 
@@ -95,11 +90,6 @@ class _JsonFormatter(logging.Formatter):
                 continue
             payload[key] = val
         return json.dumps(payload, default=str)
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def configure_logging(level: str = "INFO") -> None:

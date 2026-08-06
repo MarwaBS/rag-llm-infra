@@ -2,24 +2,24 @@
 
     python -m scripts.derive_eval_floors
 
-The gates read the artefact this writes, so no threshold is edited where it is
-used. `tests/test_eval_floors.py` re-runs this and requires the output to be
-byte-identical to the committed file, so a fixture change that moves a
-measurement cannot leave a stale floor behind.
+The gates read the artefact this writes. No threshold is edited where it is used.
+`tests/test_eval_floors.py` re-runs this and demands byte-identical output, so a
+fixture change that moves a measurement cannot leave a stale floor behind.
 
-Two rules produce the five numbers. The generation rule consumes the measured
-scores; the retrieval rule consumes only the query count and a chosen tolerance
-of one slipped rank, and the artefact records the measurements beside it so a
-regression still reddens the byte-identity test.
+Two rules produce the five numbers. The generation rule reads the measured
+scores. The retrieval rule reads only the query count and a chosen tolerance of
+one slipped rank. Both write their measurements beside the floors.
 
-generation — the decision boundary is the midpoint between the worst answer
-labelled faithful and the best one labelled hallucinated, and the gate demands at
-least half the separation the fixture population actually exhibits.
+generation — the boundary is the midpoint between the worst faithful answer and
+the best hallucinated one. The gate demands half the separation the population
+actually shows.
 
-retrieval — each floor is the score when exactly one of the n queries slips one
-rank. recall@1 counts only rank 1, so it sees a slip and a drop-out alike; MRR
-gets its own floor because it is at least recall@1 for every ranking, and sharing
-recall's number would leave it unable to reject anything recall had not already.
+retrieval — each floor is the score when one of the n queries slips a rank.
+recall@1 counts rank 1 only, so a slip and a drop-out look the same to it.
+
+MRR gets its own floor. Reciprocal rank is at least the rank-1 indicator for
+every query, so MRR never falls below recall@1. Sharing recall's number would
+leave it unable to reject anything recall had not already caught.
 """
 
 from __future__ import annotations

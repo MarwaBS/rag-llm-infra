@@ -264,6 +264,47 @@
       "find": "int(hashlib.md5(token.encode()).hexdigest(), 16)",
       "replace": "hash(token)",
       "gates": ["pytest tests/test_demo_embedder.py"]
+    },
+    {
+      "id": "M34",
+      "why": "the embedder stops treating digits as content, so \"v2\" and \"v3\" become one token",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "r\"[a-z0-9]+\"",
+      "replace": "r\"[a-z]+\"",
+      "gates": ["pytest tests/test_demo_embedder.py"]
+    },
+    {
+      "id": "M35",
+      "why": "the replay calls every non-zero exit a caught defect, so a gate that could not run is credited",
+      "file": "scripts/replay_mutations.py",
+      "find": "    return FAILED if done.returncode == 1 else ERRORED",
+      "replace": "    return FAILED",
+      "gates": ["pytest tests/test_replay_mutations.py"]
+    },
+    {
+      "id": "M36",
+      "why": "the replay stops rejecting a mutation that only breaks the import, crediting a red no guard produced",
+      "file": "scripts/replay_mutations.py",
+      "find": "        if not imports_cleanly(entry[\"file\"]):",
+      "replace": "        if False:",
+      "gates": ["pytest tests/test_replay_mutations.py"]
+    },
+    {
+      "id": "M37",
+      "why": "the replay stops separating controls from defects, so a runner that reports everything caught passes",
+      "file": "scripts/replay_mutations.py",
+      "find": "        if outcome == \"caught\" and expected_to_survive:",
+      "replace": "        if False:",
+      "gates": ["pytest tests/test_replay_mutations.py"]
+    },
+    {
+      "id": "C1",
+      "expect": "survives",
+      "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",
+      "file": "tests/test_demo_embedder.py",
+      "find": "(\"0\", \"1\", \"12345\")",
+      "replace": "(\"0\", \"1\", \"31337\")",
+      "gates": ["pytest tests/test_demo_embedder.py"]
     }
   ]
 }

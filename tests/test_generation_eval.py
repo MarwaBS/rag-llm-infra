@@ -1,11 +1,12 @@
 """The generation gate must pass, and must be able to fail.
 
-The fixtures are the part that can quietly stop working: an answer copied out of
-its own evidence scores 1.0 by set identity, and one sharing no vocabulary scores
-0.0 the same way. Either sits at a theoretical extreme, where a metric that
-discriminates and a metric that has stopped produce the same number. The first
-three tests pin the fixtures away from those extremes; the rest substitute
-metrics that do not discriminate and require the gate to go red.
+The fixtures are the part that can quietly stop working. An answer copied out of
+its own evidence scores 1.0 by set identity. One sharing no vocabulary scores 0.0
+the same way. Either sits at a theoretical extreme, where a metric that
+discriminates and a metric that has stopped produce the same number.
+
+The first three tests pin the fixtures away from those extremes. The rest
+substitute metrics that do not discriminate and require the gate to go red.
 """
 
 import eval.generation_eval as g

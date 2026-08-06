@@ -28,9 +28,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# ===============================
-# CONFIGURATION
-# ===============================
 CONFIG: dict[str, Any] = {
     "max_embedding_cache": int(os.getenv("EVIDENCE_MAX_CACHE", "2000")),
     "memory_warning_threshold": float(os.getenv("EVIDENCE_MEMORY_WARN", "0.8")),
@@ -40,9 +37,6 @@ CONFIG: dict[str, Any] = {
     "embedding_model_revision": os.getenv("EVIDENCE_EMBEDDING_REVISION", "main"),
 }
 
-# ===============================
-# DEPENDENCY ROBUSTNESS
-# ===============================
 SENTENCE_TRANSFORMERS_AVAILABLE = False
 PSUTIL_AVAILABLE = False
 
@@ -63,9 +57,6 @@ except ImportError:
     logger.debug("psutil unavailable; adaptive memory-pressure trimming disabled.")
 
 
-# ===============================
-# CONCURRENCY UTILITIES
-# ===============================
 class RWLock:
     """Reader-writer lock: concurrent reads, exclusive writes, writer-preferring.
 
@@ -139,17 +130,14 @@ class RWLock:
         return _Write(self)
 
 
-# ===============================
-# EMBEDDING ENGINE
-# ===============================
 class EmbeddingEngine:
     """Sentence embeddings with concurrent-read caching and memory-pressure trimming.
 
     Concurrency: a reader-writer lock (``RWLock``) guards the cache. Lookups take
-    the read lock (so cache hits run concurrently), and the slow
-    ``model.encode`` of cache misses runs OUTSIDE the lock — only the resulting
-    inserts take the exclusive write lock, so a cache hit never blocks behind
-    another thread's inference. Eviction is insertion-order (oldest first); a
+    the read lock, so cache hits run concurrently. The slow ``model.encode`` of a
+    miss runs OUTSIDE the lock. Only the resulting inserts take the exclusive
+    write lock, so a cache hit never blocks behind another thread's inference.
+    Eviction is insertion-order (oldest first); a
     read does not refresh recency, which is what lets lookups avoid the write
     lock.
     """

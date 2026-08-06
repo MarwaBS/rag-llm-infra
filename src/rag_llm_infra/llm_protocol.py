@@ -28,9 +28,6 @@ __all__ = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Protocol — the surface area callers depend on
-# ---------------------------------------------------------------------------
 @runtime_checkable
 class LLMProtocol(Protocol):
     """Minimal chat-completion contract used by callers.
@@ -59,9 +56,6 @@ class LLMProtocol(Protocol):
         ...
 
 
-# ---------------------------------------------------------------------------
-# OpenAI — production default
-# ---------------------------------------------------------------------------
 class OpenAIBackend:
     """Wraps `openai.OpenAI` / `openai.AsyncOpenAI`.
 
@@ -134,9 +128,6 @@ class OpenAIBackend:
             await self._aclient.close()
 
 
-# ---------------------------------------------------------------------------
-# Anthropic — contract stub
-# ---------------------------------------------------------------------------
 class AnthropicBackend:
     """Intentionally unimplemented. Exists to lock the protocol surface.
 
@@ -180,9 +171,6 @@ class AnthropicBackend:
         )
 
 
-# ---------------------------------------------------------------------------
-# Mock — deterministic, for tests
-# ---------------------------------------------------------------------------
 class MockBackend:
     """Deterministic backend for tests and local dry-runs. No network, no cost.
 
@@ -209,9 +197,6 @@ class MockBackend:
         return self._resolve(messages)
 
 
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
 _VALID_BACKENDS = ("auto", "openai", "anthropic", "mock")
 
 
