@@ -402,6 +402,46 @@
       "gates": ["pytest tests/test_tie_order.py"]
     },
     {
+      "id": "M51",
+      "why": "size memoises its first reading, so it stops following the collection",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        return int(self._client.count(collection_name=self._collection).count)",
+      "replace": "        if not hasattr(self, \"_seen\"):\n            self._seen = int(self._client.count(collection_name=self._collection).count)\n        return self._seen",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M52",
+      "why": "a native library that is installed but unloadable kills the package import instead of degrading",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "except Exception:\n    # Present but unloadable",
+      "replace": "except ImportError:\n    # Present but unloadable",
+      "gates": ["pytest tests/test_broken_optional_deps.py"]
+    },
+    {
+      "id": "M53",
+      "why": "a budget trip raised after the deadline is discarded, so an exhausted provider is billed again",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "                if isinstance(exc, BudgetExhausted):\n                    self._active = max(self._active, index + 1)",
+      "replace": "                pass",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M54",
+      "why": "a timeout is routed through retry_on, so narrowing it strands the chain on a silent backend",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "            except BackendTimeout as exc:\n                # Always retryable, whatever `retry_on` narrows to: no answer\n                # arrived, so there is nothing for the caller to act on.\n                last = exc\n",
+      "replace": "",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M55",
+      "why": "the abandoned worker stops being a daemon, so it holds interpreter shutdown",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        worker = threading.Thread(target=run, daemon=True)",
+      "replace": "        worker = threading.Thread(target=run, daemon=False)",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
       "id": "C1",
       "expect": "survives",
       "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",

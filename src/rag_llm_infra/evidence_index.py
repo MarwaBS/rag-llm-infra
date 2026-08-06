@@ -10,6 +10,7 @@ import hashlib
 import logging
 import os
 import re
+import sys
 import threading
 import time
 import unicodedata
@@ -25,8 +26,15 @@ try:
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
+except Exception:
+    # Present but unloadable — a native extension without its runtime raises
+    # OSError, not ImportError. Logged below, once the logger exists.
+    FAISS_AVAILABLE = False
+    _FAISS_LOAD_ERROR: BaseException | None = sys.exc_info()[1]
 
 logger = logging.getLogger(__name__)
+if globals().get("_FAISS_LOAD_ERROR") is not None:
+    logger.warning("faiss is installed but failed to load: %s", _FAISS_LOAD_ERROR)
 
 CONFIG: dict[str, Any] = {
     "max_embedding_cache": int(os.getenv("EVIDENCE_MAX_CACHE", "2000")),
@@ -59,6 +67,8 @@ try:
     PSUTIL_AVAILABLE = True
 except ImportError:
     logger.debug("psutil unavailable; adaptive memory-pressure trimming disabled.")
+except Exception as exc:
+    logger.warning("psutil is installed but failed to load: %s", exc)
 
 
 class RWLock:

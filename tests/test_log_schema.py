@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -60,7 +60,11 @@ def test_underscore_prefixed_fields_are_dropped() -> None:
     assert "_secret" not in _emit(_secret="value")
 
 
-def test_the_timestamp_is_timezone_aware_and_sub_second() -> None:
-    parsed = datetime.fromisoformat(_emit()["ts"])
-    assert parsed.tzinfo is not None
-    assert parsed.microsecond or "." in _emit()["ts"]
+def test_the_timestamp_is_utc_and_sub_second() -> None:
+    """`tzinfo is not None` also passes for local-with-offset, which is what the
+    docs would then be wrong about."""
+    stamp = _emit()["ts"]
+    parsed = datetime.fromisoformat(stamp)
+    assert parsed.utcoffset() == timedelta(0), stamp
+    assert stamp.endswith("+00:00"), stamp
+    assert "." in stamp.split("+")[0], stamp

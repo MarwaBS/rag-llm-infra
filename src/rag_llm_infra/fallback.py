@@ -10,13 +10,15 @@ that call only.
 
 A provider that hangs raises nothing, so without a deadline it holds the whole
 chain. Pass `timeout_s=` and a backend that does not answer in time raises
-`BackendTimeout`, which is retryable, so the chain moves on.
+`BackendTimeout`. That is handled ahead of `retry_on`, so narrowing `retry_on`
+cannot leave the chain stuck on a silent backend.
 
 Bounded: on the sync path this stops waiting, it does not cancel. The provider
 keeps working on a daemon thread and its answer is discarded. Python cannot
-interrupt a blocking socket read in another thread. The async path uses
-`asyncio.wait_for`, which does cancel. Without `timeout_s` the behaviour is
-unchanged and a hanging provider blocks.
+interrupt a blocking socket read in another thread. What is not discarded is a
+`BudgetExhausted` it raises afterwards — that still trips the chain past it.
+The async path uses `asyncio.wait_for`, which does cancel. Without `timeout_s`
+the behaviour is unchanged and a hanging provider blocks.
 
 Programming/contract errors (e.g. `TypeError`, `NotImplementedError`) are NOT
 retryable — they propagate, so a misconfigured chain fails loudly instead of
@@ -67,8 +69,11 @@ class BudgetExhausted(RuntimeError):
 
 
 class BackendTimeout(TimeoutError):
-    """A backend did not answer inside `timeout_s`. Retryable, so the chain
-    advances."""
+    """A backend did not answer inside `timeout_s`.
+
+    Handled ahead of `retry_on`, so narrowing that parameter cannot stop the
+    chain advancing past a backend that produced nothing.
+    """
 
 
 class FallbackLLM:
@@ -93,13 +98,17 @@ class FallbackLLM:
         self._active = 0
         self.backend_version = "+".join(b.backend_name for b in self._backends)
 
-    def _within_deadline(self, call: Callable[[], str]) -> str:
+    def _within_deadline(self, index: int, call: Callable[[], str]) -> str:
         """Run `call`, giving up on it after `timeout_s`.
 
         The worker is a daemon so an abandoned call cannot hold interpreter
         shutdown. Giving up is not cancelling: the provider keeps working and its
         answer is discarded. Python cannot interrupt a blocking socket read in
         another thread.
+
+        An abandoned call that later raises `BudgetExhausted` still trips the
+        chain past that backend. Dropping it would let an exhausted provider be
+        billed again on every subsequent call.
         """
         if self._timeout_s is None:
             return call()
@@ -111,6 +120,8 @@ class FallbackLLM:
                 answer.append(call())
             except BaseException as exc:  # noqa: BLE001 - re-raised on the caller's thread
                 failure.append(exc)
+                if isinstance(exc, BudgetExhausted):
+                    self._active = max(self._active, index + 1)
 
         worker = threading.Thread(target=run, daemon=True)
         worker.start()
@@ -132,8 +143,12 @@ class FallbackLLM:
             try:
                 backend = self._backends[i]
                 return self._within_deadline(
-                    partial(backend.invoke, messages, **kwargs)
+                    i, partial(backend.invoke, messages, **kwargs)
                 )
+            except BackendTimeout as exc:
+                # Always retryable, whatever `retry_on` narrows to: no answer
+                # arrived, so there is nothing for the caller to act on.
+                last = exc
             except BudgetExhausted as exc:
                 last = exc
                 # Permanent: never retry an exhausted backend. `max` keeps the
@@ -154,11 +169,18 @@ class FallbackLLM:
                 call = self._backends[i].ainvoke(messages, **kwargs)
                 if self._timeout_s is None:
                     return await call
-                # asyncio cancels the coroutine, so this deadline really stops it.
-                return await asyncio.wait_for(call, self._timeout_s)
-            except TimeoutError as exc:
+                try:
+                    # asyncio cancels the coroutine, so this deadline stops it.
+                    return await asyncio.wait_for(call, self._timeout_s)
+                except TimeoutError as exc:
+                    # Only the deadline this line imposed. A TimeoutError the
+                    # backend itself raised goes through `retry_on`, so the two
+                    # paths agree on identical input.
+                    raise BackendTimeout(
+                        f"backend did not answer within {self._timeout_s}s"
+                    ) from exc
+            except BackendTimeout as exc:
                 last = exc
-                continue
             except BudgetExhausted as exc:
                 last = exc
                 self._active = max(self._active, i + 1)

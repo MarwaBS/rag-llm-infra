@@ -53,21 +53,25 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   it, and restores it when pressure clears.
 - **Equal scores came back in whatever order the partition left them.**
   `np.argsort` defaults to quicksort, which is not stable. NumPy now orders ties
-  by the lower document index. Measured before choosing: a fully deterministic
-  top-k costs 14–22× at scale (88ms against 4.3ms over a million documents), so
-  which documents reach the top-k when more than `k` share the boundary score
-  stays unspecified, and the protocol says so rather than implying otherwise.
+  by the lower document index. The alternative — a full `lexsort`, which would
+  also fix *which* tied documents are selected — was measured first and costs
+  roughly 20× at a million documents on the machine that measured it. So the
+  selection stays unspecified and the protocol says so rather than implying
+  otherwise. Reproduce with `benchmarks/topk_tie_cost.py`.
 - **The JSON log line carried logging's own fields.** The formatter dropped a
   hand-written list of `LogRecord` attributes — a blacklist over an open set, so
   Python 3.12's `taskName` appeared on every line as `null`. The exclusion set is
   now read from a bare `LogRecord`, so the next such field is excluded on
   arrival. `ts` is UTC with an offset and milliseconds; it was local time to the
   second, which cannot be ordered across hosts.
-- **Two handlers swallowed silently and three read a fault as an absence.** The
-  memory-pressure trim now logs when it skips, the trace-context lookup catches
-  only `ImportError`, the FAISS capability probe likewise, and a
-  `sentence-transformers` that is installed but failing to import is reported as
-  a fault rather than as absence.
+- **Four broad handlers, one of which swallowed silently.** The memory-pressure
+  trim now logs when it skips, and the trace-context lookup catches only
+  `ImportError`. The four optional-dependency probes (`faiss`, `psutil`,
+  `qdrant-client`, `sentence-transformers`) tell absence from breakage: a
+  missing library is a debug line, one that is installed but will not load is a
+  warning. Both still degrade — a native extension without its runtime raises
+  `OSError`, and catching only `ImportError` would turn "FAISS is unusable here"
+  into "this package will not import".
 - **`QdrantVectorStore.size` counted nothing.** It returned a number remembered
   from the last `add()`. `search` derives its row width from it, so once the
   count was stale the answer was padded with `-1` sentinel indices. It now counts
@@ -202,6 +206,7 @@ Hardening release. Each behavioral fix carries a regression test.
   structured logging, and a FastAPI service.
 - MIT license.
 
+[0.2.0]: https://github.com/MarwaBS/rag-llm-infra/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/MarwaBS/rag-llm-infra/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/MarwaBS/rag-llm-infra/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/MarwaBS/rag-llm-infra/releases/tag/v0.1.0

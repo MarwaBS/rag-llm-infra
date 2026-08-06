@@ -24,6 +24,15 @@ def test_both_declarations_of_the_version_agree() -> None:
     assert rag_llm_infra.__version__ == _declared()
 
 
+def test_every_documented_version_carries_a_compare_link() -> None:
+    """A section without one leaves a reader no way to see what changed."""
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    sections = re.findall(r"^## \[([^\]]+)\]", text, re.M)
+    linked = set(re.findall(r"^\[([^\]]+)\]: https", text, re.M))
+    assert sections
+    assert not [s for s in sections if s not in linked]
+
+
 def test_the_changelog_has_a_section_for_the_version_being_shipped() -> None:
     headings = re.findall(
         r"^## \[([^\]]+)\]", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.M

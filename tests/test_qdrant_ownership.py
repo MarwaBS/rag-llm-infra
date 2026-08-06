@@ -59,8 +59,16 @@ def test_two_stores_that_named_different_collections_keep_their_data(
 def test_size_counts_the_collection_rather_than_remembering(
     one_endpoint: Any,
 ) -> None:
+    """Read twice across a write this store did not make. One reading cannot
+    tell a live count from a value memoised on first access."""
     store = vs.QdrantVectorStore(collection="owned")
     store.add(np.eye(3, dtype="float32"))
+    assert store.size == 3
+
+    other = vs.QdrantVectorStore(collection="owned")
+    other.add(np.eye(1, 3, dtype="float32"))
+    assert store.size == 1, "size did not follow the collection after an outside write"
+
     one_endpoint.delete_collection(collection_name="owned")
     one_endpoint.create_collection(
         collection_name="owned",
@@ -69,6 +77,20 @@ def test_size_counts_the_collection_rather_than_remembering(
         ),
     )
     assert store.size == 0
+
+
+def test_search_sizes_its_rows_from_a_count_it_re_reads(one_endpoint: Any) -> None:
+    """The row width is `min(k, size)`, so a memoised count pads with sentinels
+    exactly when the store has shrunk underneath it."""
+    store = vs.QdrantVectorStore(collection="owned")
+    store.add(np.eye(3, dtype="float32"))
+    store.search(np.eye(1, 3, dtype="float32"), k=3)  # first read of size
+
+    other = vs.QdrantVectorStore(collection="owned")
+    other.add(np.eye(1, 3, dtype="float32"))
+    _, idx = store.search(np.eye(1, 3, dtype="float32"), k=3)
+    assert idx.shape == (1, 1)
+    assert -1 not in idx[0].tolist()
 
 
 def test_search_never_pads_with_sentinels_when_the_store_shrinks(

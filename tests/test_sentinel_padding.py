@@ -7,6 +7,9 @@ document instead of a miss.
 
 from __future__ import annotations
 
+import re
+import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -41,21 +44,42 @@ def test_the_control_shows_a_full_row_is_not_padded() -> None:
     assert -1 not in idx[0].tolist()
 
 
-@pytest.mark.parametrize(
-    "module",
-    ["rag_llm_infra.serve", "example", "eval.generation_eval", "eval.retrieval_eval"],
-)
-def test_every_module_that_turns_indices_into_documents_filters(module: str) -> None:
-    """An unfiltered `-1` indexes the last document and returns it as a match."""
-    import importlib
-    import inspect
+REPO = Path(__file__).resolve().parent.parent
+LOOKUP = re.compile(r"^.*\bfor \w+ in (?:idx|indices)\[0\].*$", re.M)
 
-    source = inspect.getsource(importlib.import_module(module))
-    lookups = [
-        ln
-        for ln in source.splitlines()
-        if "for i in idx" in ln or "in indices[0]" in ln
+
+def _sources() -> list[Path]:
+    """Every tracked Python file, not a list somebody maintains by hand.
+
+    A hand-written list is a blacklist over an open set: the next module that
+    turns indices into documents is not on it.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "*.py"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return [REPO / rel for rel in listed if not rel.startswith("tests/")]
+
+
+def test_the_sweep_finds_the_lookups_it_is_meant_to_check() -> None:
+    found = {p.name for p in _sources() if LOOKUP.search(p.read_text(encoding="utf-8"))}
+    assert {
+        "serve.py",
+        "example.py",
+        "generation_eval.py",
+        "retrieval_eval.py",
+    } <= found
+
+
+def test_every_index_lookup_outside_the_tests_filters_the_sentinel() -> None:
+    """An unfiltered `-1` indexes the last document and returns it as a match."""
+    unfiltered = [
+        f"{path.name}: {line.strip()}"
+        for path in _sources()
+        for line in LOOKUP.findall(path.read_text(encoding="utf-8"))
+        if ">= 0" not in line
     ]
-    assert lookups, f"{module}: no index lookup found"
-    unfiltered = [ln.strip() for ln in lookups if ">= 0" not in ln]
-    assert not unfiltered, f"{module} does not filter the sentinel: {unfiltered}"
+    assert not unfiltered, unfiltered

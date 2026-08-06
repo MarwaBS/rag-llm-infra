@@ -88,8 +88,11 @@ try:
 
     FAISS_AVAILABLE: bool = _FAISS_AVAILABLE
 except ImportError:  # pragma: no cover - defensive
-    # Only a missing module reads as "FAISS is unavailable". A broken install
-    # raising something else is a real fault and must surface.
+    FAISS_AVAILABLE = False
+except Exception as exc:  # pragma: no cover - defensive
+    # A native extension that is present but will not load raises OSError, not
+    # ImportError. Degrade to NumPy either way; say which happened.
+    logger.warning("FAISS is installed but failed to load: %s", exc)
     FAISS_AVAILABLE = False
 
 if FAISS_AVAILABLE:
@@ -103,6 +106,11 @@ try:
 
     QDRANT_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover - exercised in envs without qdrant-client
+    QDRANT_AVAILABLE = False
+    QdrantClient = None  # type: ignore[misc,assignment]
+    qdrant_models = None  # type: ignore[assignment]
+except Exception as exc:  # pragma: no cover - defensive
+    logger.warning("qdrant-client is installed but failed to load: %s", exc)
     QDRANT_AVAILABLE = False
     QdrantClient = None  # type: ignore[misc,assignment]
     qdrant_models = None  # type: ignore[assignment]
@@ -449,6 +457,10 @@ class QdrantVectorStore:
         A local count goes stale the moment anything else writes, and `search`
         derives its row width from this, so a stale number pads the answer with
         sentinel indices. Costs one round-trip.
+
+        Raises `ValueError` from the client if the collection has been dropped
+        since `add()`. `search` inherits that, which is why the class docstring
+        says this store owns its collection.
         """
         if self._dim is None:
             return 0
