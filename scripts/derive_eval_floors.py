@@ -43,17 +43,19 @@ def _floor3(x: float) -> float:
 
 def _generation() -> dict[str, Any]:
     contexts = generation_eval.retrieve(generation_eval.QUERY)
-    scored = {
-        label: [
-            {"answer": a, "score": round(groundedness(a, contexts), 4)} for a in answers
+    scores: dict[str, list[float]] = {}
+    scored: dict[str, list[dict[str, Any]]] = {}
+    for label, answers in (
+        ("faithful", generation_eval.FAITHFUL_ANSWERS),
+        ("hallucinated", generation_eval.HALLUCINATED_ANSWERS),
+    ):
+        scores[label] = [round(groundedness(a, contexts), 4) for a in answers]
+        scored[label] = [
+            {"answer": answer, "score": score}
+            for answer, score in zip(answers, scores[label], strict=True)
         ]
-        for label, answers in (
-            ("faithful", generation_eval.FAITHFUL_ANSWERS),
-            ("hallucinated", generation_eval.HALLUCINATED_ANSWERS),
-        )
-    }
-    worst_faithful = min(row["score"] for row in scored["faithful"])
-    best_hallucinated = max(row["score"] for row in scored["hallucinated"])
+    worst_faithful = min(scores["faithful"])
+    best_hallucinated = max(scores["hallucinated"])
     # Floors derived from the metric cannot also police it: re-deriving after a
     # distortion just moves them out of its way. This is the check that does not
     # move — groundedness is documented as a [0,1] support fraction, so a metric

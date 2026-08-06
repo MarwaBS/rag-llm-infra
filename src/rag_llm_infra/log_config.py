@@ -10,8 +10,8 @@ In production (ENV=prod) log records are emitted as single-line JSON objects
 so they can be ingested by log-aggregation systems (CloudWatch, Datadog, etc.).
 In development the default human-readable format is used.
 
-Also provides an ``llm_call`` context manager that measures latency and token
-usage for every LLM invocation and emits a structured summary::
+Also provides an ``llm_call`` context manager that times an LLM invocation and
+emits a structured summary. It measures latency; the caller supplies tokens::
 
     with llm_call("expand_summary", model="gpt-4o") as ctx:
         result = chain.invoke(inputs)
@@ -123,7 +123,10 @@ def llm_call(
     model: str | None = None,
     logger: logging.Logger | None = None,
 ) -> Generator[dict[str, Any], None, None]:
-    """Measure latency + tokens for a single LLM call and log the result.
+    """Time a single LLM call and log the result as one JSON line.
+
+    Measures `latency_ms` only. `tokens` is seeded to 0 for the caller to fill —
+    this module never reads a provider response.
 
     Example::
 

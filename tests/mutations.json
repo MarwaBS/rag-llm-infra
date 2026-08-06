@@ -277,8 +277,8 @@
       "id": "M35",
       "why": "the replay calls every non-zero exit a caught defect, so a gate that could not run is credited",
       "file": "scripts/replay_mutations.py",
-      "find": "    return FAILED if done.returncode == 1 else ERRORED",
-      "replace": "    return FAILED",
+      "find": "    return done.returncode == 1",
+      "replace": "    return done.returncode != 0",
       "gates": ["pytest tests/test_replay_mutations.py"]
     },
     {
@@ -296,6 +296,22 @@
       "find": "        if outcome == \"caught\" and expected_to_survive:",
       "replace": "        if False:",
       "gates": ["pytest tests/test_replay_mutations.py"]
+    },
+    {
+      "id": "M38",
+      "why": "the pinned identifier set drops an entry, so the registry can lose that defect unnoticed",
+      "file": "tests/test_mutation_registry.py",
+      "find": "        \"M1\", \"M2\",",
+      "replace": "        \"M2\",",
+      "gates": ["pytest tests/test_mutation_registry.py"]
+    },
+    {
+      "id": "M39",
+      "why": "the producer stops refusing to derive floors from a metric that does not separate the populations",
+      "file": "scripts/derive_eval_floors.py",
+      "find": "    if not best_hallucinated < 0.5 <= worst_faithful:",
+      "replace": "    if False:",
+      "gates": ["pytest tests/test_floor_refusal.py"]
     },
     {
       "id": "C1",

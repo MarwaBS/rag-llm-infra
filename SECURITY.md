@@ -37,7 +37,8 @@ parts, not a hardened service — put it behind your own authentication, or do n
 expose it.
 
 **The JSON log formatter does not redact.** `log_config` forwards the fields a
-caller attaches via `extra={...}` into the log line verbatim; only names
-beginning with `_` are dropped. The library reads no credentials of its own and
-logs none, but it will faithfully log a secret you hand it — keep credentials
-out of `extra`.
+caller attaches via `extra={...}` into the log line verbatim. It drops names
+beginning with `_` and a fixed list of `LogRecord` attribute names; everything
+else on the record is emitted, including attributes a future Python adds. The
+library reads no credentials of its own and logs none, but it will faithfully log
+a secret you hand it — keep credentials out of `extra`.

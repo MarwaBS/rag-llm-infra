@@ -82,8 +82,7 @@ def _empty_result(n_queries: int) -> tuple[NDArrayF32, NDArrayI64]:
     )
 
 
-# Re-use the existing capability flag from evidence_index so we have one
-# source of truth for "is FAISS importable on this host".
+# One source of truth for "is FAISS importable on this host".
 try:
     from .evidence_index import FAISS_AVAILABLE as _FAISS_AVAILABLE
 

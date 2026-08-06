@@ -1,8 +1,8 @@
 """The replay decides whether every other gate can fail, so its verdict is pinned.
 
 Nothing else in the suite reads this module. A runner that reports every gate red
-prints the same `PASS: every registered defect turns a gate red` as one that ran
-them, and the registry it certifies cannot tell the difference.
+prints the same `PASS` line as one that ran them. The registry it certifies
+cannot tell the difference.
 """
 
 from __future__ import annotations
@@ -50,22 +50,33 @@ def _entry(**over: object) -> dict:
 
 
 def test_a_gate_that_passes_and_one_that_fails_are_told_apart(sandbox: Path) -> None:
-    assert replay.verdict(GATE_OK) == replay.PASSED
+    assert replay.gate_caught(GATE_OK) is False
     (sandbox / "subject.py").write_text("VALUE = 9\n", encoding="utf-8")
-    assert replay.verdict(GATE_FAILS) == replay.FAILED
+    assert replay.gate_caught(GATE_FAILS) is True
 
 
-def test_a_gate_that_could_not_run_is_not_a_failure(sandbox: Path) -> None:
-    """pytest exits 4 on a bad invocation. Counting that as a caught defect
-    credits a guard for a red it never produced."""
-    assert replay.verdict("pytest --no-such-flag") == replay.ERRORED
+def test_a_gate_that_could_not_run_earns_no_credit(sandbox: Path) -> None:
+    """pytest exits 4 on a bad invocation and 2 on a collection error. Counting
+    either as a caught defect credits a guard for a red it never produced."""
+    assert replay.gate_caught("pytest --no-such-flag") is False
 
 
 def test_a_file_that_stops_importing_is_rejected_not_credited(sandbox: Path) -> None:
     assert replay.imports_cleanly("subject.py")
-    _write_registry(sandbox, [_entry(replace="VALUE = 1\nraise RuntimeError('boom')")])
-    outcome, _ = replay.replay(_entry(replace="VALUE = 1\nraise RuntimeError('boom')"))
-    assert outcome == "unloadable"
+    broken = _entry(replace="VALUE = 1\nraise RuntimeError('boom')")
+    _write_registry(sandbox, [broken])
+    assert replay.replay(broken)[0] == "unloadable"
+    assert replay.main() == 2
+
+
+def test_a_json_file_that_stops_parsing_is_rejected_too(sandbox: Path) -> None:
+    """The registry may target data as well as code. Invalid JSON reddens every
+    gate that reads it without removing any behaviour."""
+    (sandbox / "data.json").write_text('{"k": 1}\n', encoding="utf-8")
+    assert replay.imports_cleanly("data.json")
+    broken = _entry(id="J1", file="data.json", find='{"k": 1}', replace='{"k": ')
+    _write_registry(sandbox, [broken])
+    assert replay.replay(broken)[0] == "unloadable"
     assert replay.main() == 2
 
 
@@ -89,7 +100,7 @@ def test_a_runner_stuck_on_red_is_caught_by_the_control(
     _write_registry(sandbox, [_entry(), control])
     assert replay.main() == 0
 
-    monkeypatch.setattr(replay, "verdict", lambda gate: replay.FAILED)
+    monkeypatch.setattr(replay, "gate_caught", lambda gate: True)
     assert replay.main() == 1
 
 
@@ -97,8 +108,19 @@ def test_a_runner_stuck_on_green_fails_on_the_defects(
     sandbox: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write_registry(sandbox, [_entry()])
-    monkeypatch.setattr(replay, "verdict", lambda gate: replay.PASSED)
+    monkeypatch.setattr(replay, "gate_caught", lambda gate: False)
     assert replay.main() == 1
+
+
+def test_the_printed_count_is_the_same_list_the_exit_code_is(
+    sandbox: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Anyone watching CI reads the summary line, not the exit code."""
+    _write_registry(sandbox, [_entry(), _entry(id="T2", gates=[GATE_OK])])
+    assert replay.main() == 1
+    out = capsys.readouterr().out
+    assert "1/2 caught" in out
+    assert "FAIL: nothing holds T2" in out
 
 
 def test_a_stale_anchor_stops_the_run(sandbox: Path) -> None:

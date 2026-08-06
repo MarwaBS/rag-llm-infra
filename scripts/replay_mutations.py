@@ -26,15 +26,13 @@ REPO = Path(__file__).resolve().parent.parent
 REGISTRY = REPO / "tests" / "mutations.json"
 TIMEOUT_S = 300
 
-PASSED, FAILED, ERRORED, TIMEOUT = "passed", "failed", "errored", "timeout"
 
+def gate_caught(gate: str) -> bool:
+    """Whether this gate ran and a test failed. The only place credit is decided.
 
-def verdict(gate: str) -> str:
-    """How one gate command ended.
-
-    pytest exits 1 when a test failed and 2, 3 or 4 when collection, an internal
-    error or a bad invocation stopped it. Only the first is a guard doing its
-    job, so the others are `errored` and earn no credit.
+    pytest exits 1 for a failed test and 2, 3 or 4 when collection, an internal
+    error or a bad invocation stopped it. Those earn nothing: the guard never
+    produced that red. Neither does a timeout — no verdict inside the cap.
     """
     argv = gate.split()
     if argv[0] == "pytest":
@@ -46,10 +44,8 @@ def verdict(gate: str) -> str:
             argv, cwd=REPO, capture_output=True, text=True, timeout=TIMEOUT_S
         )
     except subprocess.TimeoutExpired:
-        return TIMEOUT
-    if done.returncode == 0:
-        return PASSED
-    return FAILED if done.returncode == 1 else ERRORED
+        return False
+    return done.returncode == 1
 
 
 def imports_cleanly(rel: str) -> bool:
@@ -97,7 +93,7 @@ def replay(entry: dict) -> tuple[str, str | None]:
         if not imports_cleanly(entry["file"]):
             return "unloadable", None
         for gate in entry["gates"]:
-            if verdict(gate) == FAILED:
+            if gate_caught(gate):
                 return "caught", gate
     finally:
         path.write_bytes(original)
@@ -108,7 +104,6 @@ def main() -> int:
     registry = json.loads(REGISTRY.read_text(encoding="utf-8"))["mutations"]
     survivors: list[str] = []
     controls_caught: list[str] = []
-    caught = 0
     for entry in registry:
         outcome, gate = replay(entry)
         expected_to_survive = entry.get("expect") == "survives"
@@ -121,7 +116,6 @@ def main() -> int:
                 f"  CONTROL CAUGHT {entry['id']}  by `{gate}` — the gates are not running"
             )
         elif outcome == "caught":
-            caught += 1
             print(f"  CAUGHT   {entry['id']}  by `{gate}`  — {entry['why']}")
         elif expected_to_survive:
             print(f"  CONTROL  {entry['id']}  survived, as it must  — {entry['why']}")
@@ -129,7 +123,9 @@ def main() -> int:
             survivors.append(entry["id"])
             print(f"  SURVIVED {entry['id']}  — {entry['why']}")
 
+    # Derived from the lists the exit code reads, so the two cannot disagree.
     defects = [e for e in registry if e.get("expect") != "survives"]
+    caught = len(defects) - len(survivors)
     print(f"\n{caught}/{len(defects)} caught, {len(registry) - len(defects)} controls")
     if controls_caught:
         print(f"FAIL: control {', '.join(controls_caught)} reported caught")

@@ -39,7 +39,10 @@ jobs:
         run: ruff format --check .
 
       - name: Type-check (mypy)
-        run: mypy src
+        run: mypy src scripts
+
+      - name: Spell check (codespell)
+        run: codespell
 
       - name: Build wheel + sdist
         run: python -m build

@@ -7,19 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.3] - unreleased
 
-Every CI gate that reads a number out of this code has been shown to go red. So
-has the replay that decides those verdicts.
+The suite and both eval gates have each been shown to go red, and so has the
+replay that decides those verdicts.
 
 `tests/mutations.json` registers the defects. `scripts/replay_mutations.py`
-applies each one in turn. A test fails the build if the registry loses an entry,
-or if a scoring gate appears in the workflow with nothing registered against it —
-the workflow is parsed as YAML, so a `run:` block scalar cannot hide one.
+applies each one in turn. One test fails the build if the registry loses an
+entry. Another fails it if a module in `eval/` has nothing registered against it.
+That second check reads the `eval` package rather than the workflow files, so a
+scoring gate that is not an eval module falls outside it.
 
-The replay carries defects of its own and a control that must survive. A runner
-stuck on green fails on the defects. One stuck on red fails on the control.
+The replay carries defects of its own and one control that must survive. A runner
+stuck on green fails on the defects. One stuck on red fails on the control. The
+control is pinned whole — file, anchor and replacement — so a live guard cannot
+be parked in the registry and signed off as intended behaviour.
 
-Lint, type-check and build run third-party tools over the tree and are not in the
-registry. `example.py` exits on an exception, not on a score.
+Credit is decided in one place. Only pytest's exit code for a failed test earns
+it; 2, 3 and 4 are a collection error, an internal error and a bad invocation. A
+mutation that stops the file loading is rejected rather than credited.
+
+Lint, type-check, spell check and build run third-party tools over the tree and
+carry no registered defect. `example.py` exits on an exception, not on a score.
 
 ### Fixed
 - **`OpenAIBackend.close()` closed nothing on the async client.** `AsyncOpenAI.close`
@@ -51,6 +58,10 @@ registry. `example.py` exits on an exception, not on a score.
 ### Changed
 - `requires-python` is bounded at both ends (`>=3.12,<3.14`) and CI runs both
   legs it admits.
+- **Documentation states mechanisms and is executed where it can be.** The
+  README's request bodies are posted through the app by a test and its relative
+  links are resolved; `codespell` runs as a CI gate; `mypy` covers `scripts/`;
+  and `llm_call` no longer claims to measure tokens, which it never did.
 - Documentation states what the code does: the shipped unauthenticated server,
   what the log formatter does not redact, and that importing
   `rag_llm_infra.serve` configures neither logging nor tracing (pinned by a

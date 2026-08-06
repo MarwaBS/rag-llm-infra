@@ -8,7 +8,7 @@ a swappable vector store, a cached embedding index, a provider-agnostic LLM
 protocol, the observability around them, a FastAPI serving layer, and a
 retrieval-quality eval gate.
 
-> Distilled infrastructure layer — typed, tested, packaged, and runnable on its own.
+> Typed, tested, packaged, and runnable on its own.
 
 ## Install
 
@@ -61,7 +61,7 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 | `rag_llm_infra.vector_store` | `VectorStoreProtocol` — in-process FAISS `IndexFlatIP`, pure-NumPy fallback, real **Qdrant** (batched search) |
 | `rag_llm_infra.evidence_index` | `EmbeddingEngine` — SentenceTransformers embeddings + a cache (insertion-order eviction) guarded by a writer-preferring reader/writer lock, so the slow `model.encode` runs outside the lock. Memory-pressure-aware trimming activates with the `[psutil]` extra (`pip install "rag-llm-infra[psutil]"`); without it the cache is fixed-size |
 | `rag_llm_infra.tracing` | OpenTelemetry spans with console-exporter + no-op fallbacks |
-| `rag_llm_infra.log_config` | structured JSON logging + an `llm_call` latency/token timer |
+| `rag_llm_infra.log_config` | structured JSON logging + an `llm_call` timer. It measures latency; `tokens` is a field the caller fills |
 | `rag_llm_infra.serve` | FastAPI service (`/index`, `/query`, `/health`) over the vector store + LLM protocol. **No authentication** — see [SECURITY.md](SECURITY.md). Does not install `log_config` or `tracing`; call those yourself at startup |
 | `rag_llm_infra.faithfulness` | `groundedness(answer, contexts)` — lexical faithfulness metric for RAG output |
 | `rag_llm_infra.fallback` | `FallbackLLM` — budget-aware multi-provider routing; drop-in `LLMProtocol` |
@@ -81,14 +81,14 @@ re-running the producer to reproduce that file byte for byte. The generation
 floors come from the measured scores; the retrieval floors come from the query
 count and a stated tolerance of one slipped rank.
 
-`groundedness` is a **cheap lexical tripwire, not a faithfulness guarantee** — it
-scores token overlap, so by construction it is negation-blind ("X is not Y" looks
-grounded), dilutable (a false clause appended to a true answer only dents the
-score), and propositional claims it can't verify. It catches the common
-out-of-vocabulary hallucination signature cheaply on every generation; pair it with
-an LLM-judge for semantic faithfulness. The limits are spelled out in the
-`faithfulness` module docstring and pinned by tests so they can't be quietly
-oversold later.
+`groundedness` is a **cheap lexical tripwire, not a faithfulness guarantee**. It
+scores token overlap, so it has three blind spots by construction. It is
+negation-blind: "X is not Y" reads as grounded. It is dilutable: a false clause
+appended to a true answer only dents the score. And it scores vocabulary, not
+propositions, so it cannot tell whether the evidence asserts the claim. It
+catches the out-of-vocabulary hallucination signature cheaply on every
+generation. Pair it with an LLM-judge for semantic faithfulness. The limits are
+in the `faithfulness` module docstring and pinned by tests.
 
 ## Engineering principles demonstrated
 

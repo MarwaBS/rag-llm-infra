@@ -8,11 +8,9 @@ registry of unappliable entries replays green while testing nothing.
 
 import ast
 import json
-import re
 from pathlib import Path
 
 import pytest
-import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 REGISTRY = json.loads((REPO / "tests" / "mutations.json").read_text(encoding="utf-8"))[
@@ -24,7 +22,7 @@ EXPECTED_IDS = frozenset(
         "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10",
         "M11", "M12", "M13", "M14", "M15", "M16", "M17", "M18", "M19", "M20",
         "M21", "M22", "M23", "M24", "M25", "M26", "M27", "M28", "M29", "M30",
-        "M31", "M32", "M33", "M34", "M35", "M36", "M37",
+        "M31", "M32", "M33", "M34", "M35", "M36", "M37", "M38", "M39",
         "C1",
     }
 )  # fmt: skip
@@ -41,53 +39,40 @@ def test_every_id_is_unique() -> None:
     assert len(set(ids)) == len(ids)
 
 
-WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
+CONTROL = {
+    "id": "C1",
+    "file": "tests/test_demo_embedder.py",
+    "find": '("0", "1", "12345")',
+    "replace": '("0", "1", "31337")',
+}
 
 
-def _ci_gate_commands() -> list[str]:
-    """Every command any step runs.
+def _scoring_modules() -> list[str]:
+    """Every runnable module in `eval/`.
 
-    A `run:` block scalar holds several commands on their own lines, and the
-    install step already uses that form, so this walks the parsed document
-    instead of matching source lines.
+    The gates that score this repo are `pytest` and the eval modules. Reading the
+    package is structural, so a new eval module is in scope the moment it exists,
+    whichever workflow ends up calling it. Bounded: a scoring gate that is not an
+    eval module — some future `scripts/score_*.py` — is outside this check.
     """
-    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    commands = []
-    for job in document["jobs"].values():
-        for step in job.get("steps", []):
-            for line in (step.get("run") or "").splitlines():
-                if line.strip():
-                    commands.append(line.strip())
-    return commands
+    return sorted(
+        path.stem
+        for path in (REPO / "eval").glob("*.py")
+        if not path.name.startswith("_")
+        and "\ndef main(" in path.read_text(encoding="utf-8")
+    )
 
 
-def _scores_this_repo(command: str) -> bool:
-    return command.startswith(("pytest", "python -m eval."))
+def test_every_eval_gate_carries_a_defect() -> None:
+    modules = _scoring_modules()
+    assert modules, "no runnable eval module found"
+    covered = {gate for entry in REGISTRY for gate in entry["gates"]}
+    missing = [m for m in modules if f"python -m eval.{m}" not in covered]
+    assert not missing, f"no registered defect for {missing}"
 
 
-def _gate_key(command: str) -> str:
-    return "pytest" if command.startswith("pytest") else command
-
-
-def test_the_workflow_parse_sees_every_run_step() -> None:
-    """A parser that silently drops a step makes the coverage check below pass
-    over a gate that is really there."""
-    steps = len(re.findall(r"^\s+run:", WORKFLOW.read_text(encoding="utf-8"), re.M))
-    assert steps
-    assert len(_ci_gate_commands()) >= steps
-
-
-def test_every_ci_gate_that_scores_this_repo_carries_a_defect() -> None:
-    """ruff, mypy and `python -m build` are third-party tools whose failure modes
-    are theirs, and `example.py` exits on an exception rather than on a score.
-    The rest read a number out of this code, so each one can be shown to go red.
-    """
-    commands = _ci_gate_commands()
-    assert commands, "no gate step parsed out of ci.yml"
-    required = {_gate_key(c) for c in commands if _scores_this_repo(c)}
-    assert required, "no scoring gate parsed out of ci.yml"
-    covered = {_gate_key(gate) for entry in REGISTRY for gate in entry["gates"]}
-    assert required <= covered, f"no registered defect for {sorted(required - covered)}"
+def test_the_suite_carries_defects() -> None:
+    assert any(g.startswith("pytest") for e in REGISTRY for g in e["gates"])
 
 
 def test_the_replay_carries_defects_of_its_own() -> None:
@@ -96,10 +81,13 @@ def test_the_replay_carries_defects_of_its_own() -> None:
     assert any(entry["file"] == "scripts/replay_mutations.py" for entry in REGISTRY)
 
 
-def test_a_control_that_must_survive_is_registered() -> None:
-    """The survivor list only catches a runner stuck on green. A control the
-    gates cannot see catches one stuck on red."""
-    assert any(entry.get("expect") == "survives" for entry in REGISTRY)
+def test_the_only_control_is_this_one() -> None:
+    """A control is declared, not detected — survival is what a control and an
+    unheld guard have in common. Pinning it whole is what stops a real guard
+    being parked in the registry and reported as intended behaviour."""
+    controls = [entry for entry in REGISTRY if entry.get("expect") == "survives"]
+    assert len(controls) == 1
+    assert {key: controls[0][key] for key in CONTROL} == CONTROL
 
 
 @pytest.mark.parametrize("entry", REGISTRY, ids=lambda e: e["id"])

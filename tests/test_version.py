@@ -1,8 +1,9 @@
 """The shipped version is declared once in effect, and it is documented.
 
-`pyproject.toml` and `__init__.py` each carry the version as a literal, and the
-release workflow compares the tag against `pyproject.toml` alone. Without these
-two assertions the wheel and `__version__` can ship a release apart.
+`pyproject.toml` and `__init__.py` each carry the version as a literal. The
+release workflow compares the tag against `__version__` alone; the wheel takes
+its version from `pyproject.toml`. Without these two assertions the two literals
+can ship a release apart.
 """
 
 import re

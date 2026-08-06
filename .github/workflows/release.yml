@@ -5,8 +5,9 @@ name: Release to PyPI
 #
 # Publishing is GATED and uses build-once / promote: the `gate` job runs lint,
 # format, mypy, pytest at the same 85% floor, both eval gates, and the mutation
-# replay. It differs from the suite guarding `main`: 3.12 only, where `main` runs
-# the 3.12 + 3.13 matrix, and no end-to-end example run. It then builds the wheel + sdist and
+# replay, over the same coverage scope. It differs from the suite guarding `main`
+# in exactly two ways: 3.12 only, where `main` runs the 3.12 + 3.13 matrix, and no
+# end-to-end example run. It then builds the wheel + sdist and
 # validates THAT artifact (installs the built wheel in a clean venv, imports it,
 # and checks the py.typed marker ships). The exact bytes
 # it built and validated are uploaded as a workflow artifact; the `publish` job
@@ -51,9 +52,12 @@ jobs:
       - name: Format check (ruff)
         run: ruff format --check .
       - name: Type-check (mypy)
-        run: mypy src
+        run: mypy src scripts
+
+      - name: Spell check (codespell)
+        run: codespell
       - name: Tests (same coverage floor as CI)
-        run: pytest -q --cov=src/rag_llm_infra --cov-report=term-missing --cov-fail-under=85
+        run: pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-report=term-missing --cov-fail-under=85
       - name: Retrieval eval gate (recall@1 / MRR)
         run: python -m eval.retrieval_eval
       - name: Generation eval gate (groundedness / faithfulness)
