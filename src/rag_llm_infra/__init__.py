@@ -2,11 +2,17 @@
 
 Public API: the LLM-provider and vector-store protocols + factories, the cached
 embedding index, and the observability helpers.
+
+`CONFIG` and `RWLock` are not exported. Everything named here is a compatibility
+promise, and neither could be kept: `CONFIG` is read partly at construction and
+partly per call, and `RWLock` is an implementation detail of `EmbeddingEngine`.
+Both remain reachable at `rag_llm_infra.evidence_index` for anyone who accepts
+that they can change.
 """
 
 from __future__ import annotations
 
-from .evidence_index import CONFIG, EmbeddingEngine, RWLock
+from .evidence_index import EmbeddingEngine
 from .faithfulness import groundedness
 from .fallback import BudgetExhausted, FallbackLLM
 from .llm_protocol import (
@@ -47,8 +53,6 @@ __all__ = [
     "QDRANT_AVAILABLE",
     # Embedding index
     "EmbeddingEngine",
-    "RWLock",
-    "CONFIG",
     # Observability
     "configure_tracing",
     "get_tracer",

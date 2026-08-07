@@ -1,9 +1,14 @@
+# Runs the same two ruff commands CI does. Without ruff-format here, a clean
+# pre-commit pass still fails CI's `ruff format --check`.
+# `rev` is pinned and must not fall behind the `ruff` floor in pyproject.toml;
+# tests/test_precommit_matches_ci.py holds both.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.16.1
     hooks:
       - id: ruff
         args: [--fix]
+      - id: ruff-format
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

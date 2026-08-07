@@ -39,6 +39,44 @@ def _set_memory(monkeypatch: pytest.MonkeyPatch, percent: float) -> None:
     )
 
 
+def test_the_engine_reads_config_once_at_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One behaviour, not two. Half the values were snapshotted and half read
+    per call, so a caller mutating CONFIG could not tell which half they had
+    changed."""
+    monkeypatch.setitem(CONFIG, "max_embedding_cache", 2000)
+    monkeypatch.setitem(CONFIG, "adaptive_cache", False)
+    monkeypatch.setitem(CONFIG, "memory_warning_threshold", 0.8)
+    engine = ei.EmbeddingEngine(model=_FakeEmbedder())
+
+    monkeypatch.setitem(CONFIG, "max_embedding_cache", 5)
+    monkeypatch.setitem(CONFIG, "adaptive_cache", True)
+    monkeypatch.setitem(CONFIG, "memory_warning_threshold", 0.1)
+
+    assert engine._configured_cache_size == 2000
+
+    # Behaviour, not the stored copy: an attribute can hold the snapshot while
+    # the code that matters still reads CONFIG.
+    _set_memory(monkeypatch, 99.0)
+    engine._last_memory_check = 0.0
+    engine._check_memory_pressure()
+    assert engine._max_cache_size == 2000, "the trim ran under a later CONFIG change"
+
+    monkeypatch.setitem(CONFIG, "memory_warning_threshold", 0.99)
+    monkeypatch.setitem(CONFIG, "adaptive_cache", True)
+    engine._last_memory_check = 0.0
+    engine._check_memory_pressure()
+    assert engine._max_cache_size == 2000
+
+
+def test_the_control_shows_a_new_engine_picks_up_the_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(CONFIG, "max_embedding_cache", 5)
+    assert ei.EmbeddingEngine(model=_FakeEmbedder())._configured_cache_size == 5
+
+
 @pytest.mark.parametrize("configured", [1, 2, 50, 150, 199, 200, 2000])
 def test_pressure_never_raises_the_configured_limit(
     engine, monkeypatch: pytest.MonkeyPatch, configured: int

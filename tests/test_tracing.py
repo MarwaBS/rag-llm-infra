@@ -5,7 +5,7 @@ The OTel API + SDK ship in the dev group, so the REAL configuration path
 CI, not just the import-guarded fallbacks.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

@@ -58,6 +58,10 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   repoint at other code.
 
 ### Added
+- **`LLMProtocol` requires `close()` and `aclose()`.** Implementations hold
+  network clients and the protocol had no way to release them, so a caller
+  holding the protocol type could not close one. `FallbackLLM` closes every
+  backend in its chain, including ones already tripped by budget exhaustion.
 - **`.dockerignore`, denying by default.** `COPY . .` was admitting a 315 MiB
   virtualenv and the git history. The rules admit `pyproject.toml`, `README.md`,
   `LICENSE` and `src/` and nothing else; a test assembles a directory from those
@@ -70,6 +74,11 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   reaches `healthy`.
 
 ### Removed — breaking
+- **`CONFIG` and `RWLock` are no longer exported from the package root.** Every
+  name in `__all__` is a compatibility promise and neither could be kept:
+  `CONFIG` was read partly at construction and partly per call, and `RWLock` is
+  an implementation detail of `EmbeddingEngine`. Both remain reachable at
+  `rag_llm_infra.evidence_index`. A test pins the exported set.
 - **`QdrantVectorStore` no longer defaults its collection to `"evidence"`.** The
   name is now the first, required argument, and `get_vector_store("qdrant")`
   needs `collection=`. `add()` deletes and recreates that collection, so two

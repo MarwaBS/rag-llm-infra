@@ -3,7 +3,6 @@
 import contextlib
 import json
 import logging
-from unittest.mock import patch
 
 import pytest
 
@@ -106,46 +105,31 @@ class TestConfigureLogging:
         finally:
             log_config._CONFIGURED = original
 
-    def test_configure_logging_prod_mode(self):
+    @pytest.mark.parametrize("env,json_expected", [("prod", True), ("dev", False)])
+    def test_configure_logging_reads_env_when_it_is_called(
+        self, monkeypatch, env, json_expected
+    ):
+        """The variable is read at call time, so setting it in a `main()` before
+        configuring works. A module-level snapshot ignored it."""
         import rag_llm_infra.log_config as log_config
 
+        monkeypatch.setenv("ENV", env)
         original_configured = log_config._CONFIGURED
-        original_env = log_config.ENV
         log_config._CONFIGURED = False
-        log_config.ENV = "prod"
-        root = logging.getLogger()
-        original_handlers = root.handlers[:]
-        root.handlers = []  # Clear handlers to trigger setup
-        try:
-            log_config.configure_logging()
-            # Should have added a handler with JsonFormatter
-            added = [h for h in root.handlers if h not in original_handlers]
-            if added:
-                assert isinstance(added[0].formatter, log_config._JsonFormatter)
-        finally:
-            root.handlers = original_handlers
-            log_config._CONFIGURED = original_configured
-            log_config.ENV = original_env
-
-    def test_configure_logging_dev_mode(self):
-        import rag_llm_infra.log_config as log_config
-
-        original_configured = log_config._CONFIGURED
-        original_env = log_config.ENV
-        log_config._CONFIGURED = False
-        log_config.ENV = "dev"
         root = logging.getLogger()
         original_handlers = root.handlers[:]
         root.handlers = []
         try:
             log_config.configure_logging()
             added = [h for h in root.handlers if h not in original_handlers]
-            if added:
-                assert not isinstance(added[0].formatter, log_config._JsonFormatter)
+            assert added, "no handler was installed"
+            assert (
+                isinstance(added[0].formatter, log_config._JsonFormatter)
+                is json_expected
+            )
         finally:
             root.handlers = original_handlers
             log_config._CONFIGURED = original_configured
-            log_config.ENV = original_env
 
 
 class TestLlmCall:

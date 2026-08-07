@@ -14,6 +14,9 @@ license = "MIT"
 authors = [{ name = "Marwa Ben Salem" }]
 keywords = ["rag", "llm", "vector-store", "faiss", "qdrant", "openai", "embeddings", "retrieval"]
 classifiers = [
+  # 4 - Beta: published, versioned and gated, but the public surface is still
+  # moving (0.2.0 removed a constructor default).
+  "Development Status :: 4 - Beta",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "License :: OSI Approved :: MIT License",
@@ -56,6 +59,8 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/MarwaBS/rag-llm-infra"
 Repository = "https://github.com/MarwaBS/rag-llm-infra"
+Changelog = "https://github.com/MarwaBS/rag-llm-infra/blob/main/CHANGELOG.md"
+Issues = "https://github.com/MarwaBS/rag-llm-infra/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rag_llm_infra"]
@@ -69,11 +74,10 @@ exclude = [".git", ".venv", "__pycache__"]
 # F/E (pyflakes/pycodestyle) + I (import sort), B (bugbear: real-bug lints),
 # UP (pyupgrade: keep syntax current to the py312 floor).
 select = ["F", "E", "I", "B", "UP"]
-ignore = ["E402", "E501", "E701", "E741"]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["F401", "F841"]
-"src/rag_llm_infra/evidence_index.py" = ["F401"]
+# E501 only: `ruff format` owns line length and declines to split 21 lines here
+# (long URLs and single-token strings), so the two rules would contradict.
+# E402, E701 and E741 were removed after measuring that nothing needs them.
+ignore = ["E501"]
 
 [tool.pytest.ini_options]
 # A test that blocks gets a verdict instead of stalling the job. It does not
@@ -84,6 +88,8 @@ addopts = "-ra --import-mode=importlib --timeout=60"
 asyncio_mode = "auto"
 pythonpath = ["src", "."]
 markers = ["slow: marks tests as slow (deselect with '-m not slow')"]
+# faiss-cpu's SWIG bindings emit these three on import. They come from a
+# dependency's generated code and no change here can silence them at source.
 filterwarnings = [
   "ignore:.*SwigPyPacked has no __module__ attribute:DeprecationWarning",
   "ignore:.*SwigPyObject has no __module__ attribute:DeprecationWarning",
@@ -94,12 +100,10 @@ filterwarnings = [
 # No python_version pin: each CI leg type-checks under its own interpreter, so
 # the 3.13 leg is not a second copy of the 3.12 one.
 ignore_missing_imports = true
-warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
 module = ["rag_llm_infra.*"]
 disallow_untyped_defs = true
-warn_return_any = false
 
 [tool.codespell]
 skip = "./.git,./.venv,./dist,./build,./htmlcov,./.mypy_cache,./.pytest_cache"

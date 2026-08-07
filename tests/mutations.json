@@ -578,6 +578,62 @@
       "gates": ["pytest tests/test_workflows.py"]
     },
     {
+      "id": "M73",
+      "why": "the engine reads part of its configuration live again, so one instance can be half-configured",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "        if not self._adaptive_cache or not PSUTIL_AVAILABLE:",
+      "replace": "        if not CONFIG[\"adaptive_cache\"] or not PSUTIL_AVAILABLE:",
+      "gates": ["pytest tests/test_cache_pressure_bounds.py"]
+    },
+    {
+      "id": "M74",
+      "why": "an internal is promised as public API again",
+      "file": "src/rag_llm_infra/__init__.py",
+      "find": "    # Embedding index\n    \"EmbeddingEngine\",",
+      "replace": "    # Embedding index\n    \"EmbeddingEngine\",\n    \"CONFIG\",",
+      "gates": ["pytest tests/test_public_surface.py"]
+    },
+    {
+      "id": "M75",
+      "why": "the protocol loses its lifecycle, so a caller holding it cannot release a transport",
+      "file": "src/rag_llm_infra/llm_protocol.py",
+      "find": "    def close(self) -> None:\n        \"\"\"Release the sync transport. A backend holding none does nothing.\"\"\"\n        ...\n",
+      "replace": "",
+      "gates": ["pytest tests/test_public_surface.py"]
+    },
+    {
+      "id": "M76",
+      "why": "closing the chain skips backends already tripped, leaking their transports",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        for backend in self._backends:\n            backend.close()",
+      "replace": "        for backend in self._backends[self._active :]:\n            backend.close()",
+      "gates": ["pytest tests/test_public_surface.py"]
+    },
+    {
+      "id": "M77",
+      "why": "the log environment is decided at import again, so a caller setting it later is ignored",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "    return os.getenv(\"ENV\", \"dev\").lower()",
+      "replace": "    return \"dev\"",
+      "gates": ["pytest tests/test_log_config.py"]
+    },
+    {
+      "id": "M78",
+      "why": "a variable the package reads stops being documented for the operator who must set it",
+      "file": ".env.example",
+      "find": "RAG_API_KEY=\n",
+      "replace": "",
+      "gates": ["pytest tests/test_env_example.py"]
+    },
+    {
+      "id": "M79",
+      "why": "the format hook goes, so a clean pre-commit run still fails the CI format gate",
+      "file": ".pre-commit-config.yaml",
+      "find": "      - id: ruff-format\n",
+      "replace": "",
+      "gates": ["pytest tests/test_precommit_matches_ci.py"]
+    },
+    {
       "id": "C1",
       "expect": "survives",
       "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",

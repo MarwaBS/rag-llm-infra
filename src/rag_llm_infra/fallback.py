@@ -139,6 +139,15 @@ class FallbackLLM:
             raise failure[0]
         return answer[0]
 
+    def close(self) -> None:
+        """Close every backend in the chain, including ones already tripped."""
+        for backend in self._backends:
+            backend.close()
+
+    async def aclose(self) -> None:
+        for backend in self._backends:
+            await backend.aclose()
+
     @property
     def active_index(self) -> int:
         """Index of the first backend still eligible (advances past exhausted ones)."""

@@ -42,7 +42,15 @@ def _get_trace_context() -> dict[str, str]:
         return {"trace_id": "", "span_id": ""}
 
 
-ENV: str = os.getenv("ENV", "dev").lower()
+def current_env() -> str:
+    """Read at call time, not at import.
+
+    A module-level snapshot is taken before most callers have set anything, so
+    `ENV=prod` chosen in a `main()` was silently ignored.
+    """
+    return os.getenv("ENV", "dev").lower()
+
+
 _CONFIGURED = False
 
 
@@ -97,7 +105,7 @@ def configure_logging(level: str = "INFO") -> None:
         _CONFIGURED = True
         return
     handler = logging.StreamHandler()
-    if ENV == "prod":
+    if current_env() == "prod":
         handler.setFormatter(_JsonFormatter())
     else:
         handler.setFormatter(

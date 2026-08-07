@@ -55,6 +55,18 @@ class LLMProtocol(Protocol):
         """Async chat completion. Returns the assistant text."""
         ...
 
+    def close(self) -> None:
+        """Release the sync transport. A backend holding none does nothing."""
+        ...
+
+    async def aclose(self) -> None:
+        """Release the async transport.
+
+        Separate from `close` because an async client's own close is a
+        coroutine: calling it from a sync method discards it and closes nothing.
+        """
+        ...
+
 
 class OpenAIBackend:
     """Wraps `openai.OpenAI` / `openai.AsyncOpenAI`.
@@ -170,6 +182,12 @@ class AnthropicBackend:
             "docs/decisions/006-llm-protocol-abstraction.md for the full plan."
         )
 
+    def close(self) -> None:
+        """Never opens a transport, so closing is not the unimplemented part."""
+
+    async def aclose(self) -> None:
+        """Never opens a transport, so closing is not the unimplemented part."""
+
 
 class MockBackend:
     """Deterministic backend for tests and local dry-runs. No network, no cost.
@@ -195,6 +213,12 @@ class MockBackend:
 
     async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
         return self._resolve(messages)
+
+    def close(self) -> None:
+        """Holds no transport."""
+
+    async def aclose(self) -> None:
+        """Holds no transport."""
 
 
 _VALID_BACKENDS = ("auto", "openai", "anthropic", "mock")

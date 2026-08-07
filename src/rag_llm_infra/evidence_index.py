@@ -9,7 +9,6 @@ embeddings with adaptive, memory-pressure-aware caching.
 import hashlib
 import logging
 import os
-import re
 import sys
 import threading
 import time
@@ -21,7 +20,7 @@ import numpy as np
 
 # FAISS import for cache compatibility checks
 try:
-    import faiss
+    import faiss  # noqa: F401 - imported to probe availability, never called
 
     FAISS_AVAILABLE = True
 except ImportError:
@@ -40,6 +39,8 @@ if not FAISS_AVAILABLE:
     else:
         logger.warning("faiss is installed but failed to load: %s", error)
 
+# Read once, when an EmbeddingEngine is constructed. Mutating it afterwards does
+# not reach an engine that already exists; build a new one.
 CONFIG: dict[str, Any] = {
     "max_embedding_cache": int(os.getenv("EVIDENCE_MAX_CACHE", "2000")),
     "memory_warning_threshold": float(os.getenv("EVIDENCE_MEMORY_WARN", "0.8")),
@@ -170,9 +171,9 @@ class EmbeddingEngine:
         """
         model: inject a pre-built embedder (anything with
             ``encode(list[str], convert_to_numpy=..., show_progress_bar=...) ->
-            ndarray``). Lets the engine run without sentence-transformers and
-            lets callers supply a custom model. When None, a
-            ``SentenceTransformer`` is loaded.
+            ndarray``). Runs without sentence-transformers installed, and lets a
+            caller supply their own model. When None, a ``SentenceTransformer``
+            is loaded.
         revision: pin the model revision for reproducible loads. Defaults to
             ``CONFIG['embedding_model_revision']`` (env EVIDENCE_EMBEDDING_REVISION).
         """
@@ -190,10 +191,12 @@ class EmbeddingEngine:
         self._cache: OrderedDict[str, Any] = OrderedDict()
         self._lock = RWLock()
         self._stats_lock = threading.Lock()
-        # The ceiling the operator set, kept so a trim can be undone when
-        # pressure clears and can never derive a limit above it.
+        # Every CONFIG value this engine uses is read here and nowhere else, so
+        # one instance cannot be half-configured by a later mutation.
         self._configured_cache_size = CONFIG["max_embedding_cache"]
         self._max_cache_size = self._configured_cache_size
+        self._adaptive_cache = CONFIG["adaptive_cache"]
+        self._memory_warning_threshold = CONFIG["memory_warning_threshold"]
         self._total_requests = 0
         self._cache_hits = 0
         self._last_memory_check = time.time()
@@ -211,7 +214,7 @@ class EmbeddingEngine:
         return hashlib.md5(raw_key.encode(), usedforsecurity=False).hexdigest()
 
     def _check_memory_pressure(self) -> None:
-        if not CONFIG["adaptive_cache"] or not PSUTIL_AVAILABLE:
+        if not self._adaptive_cache or not PSUTIL_AVAILABLE:
             return
         if time.time() - self._last_memory_check < 30:
             return
@@ -220,7 +223,7 @@ class EmbeddingEngine:
         self._last_memory_check = time.time()
         try:
             memory_percent = psutil.virtual_memory().percent
-            if memory_percent > CONFIG["memory_warning_threshold"] * 100:
+            if memory_percent > self._memory_warning_threshold * 100:
                 # Halve the configured limit, not the already-halved one, and
                 # never exceed what the operator asked for. A floor above the
                 # configured size raises the cap under pressure.
