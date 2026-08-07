@@ -31,6 +31,23 @@ def test_the_security_policy_covers_the_version_being_shipped() -> None:
     assert f"| {series}.x" in policy, f"SECURITY.md does not support {series}.x"
 
 
+def test_the_security_policy_still_covers_the_published_line() -> None:
+    """A minor bump moves the table to the series being shipped. Until that
+    series is on PyPI, dropping the older row leaves the release people can
+    actually install reading as unsupported."""
+    released = re.search(
+        r"^## \[(\d+\.\d+)\.\d+\] - (?!unreleased)\S",
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        re.M,
+    )
+    assert released, "CHANGELOG.md names no released version"
+    policy = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    row = rf"^\|\s*{re.escape(released.group(1))}\.x\s*\|\s*yes\s*\|"
+    assert re.search(row, policy, re.M), (
+        f"SECURITY.md drops {released.group(1)}.x, the newest released line"
+    )
+
+
 def test_every_documented_version_carries_a_compare_link() -> None:
     """A section without one leaves a reader no way to see what changed."""
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

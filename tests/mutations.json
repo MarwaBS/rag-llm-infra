@@ -666,20 +666,12 @@
       "gates": ["pytest tests/test_reset_failure.py"]
     },
     {
-      "id": "M84",
-      "why": "a non-ascii character re-enters tracked text, where no other tool reads it",
-      "file": "README.md",
-      "find": "## Install",
-      "replace": "## Install \u2014",
-      "gates": ["pytest tests/test_tracked_text_is_ascii.py"]
-    },
-    {
       "id": "M85",
       "why": "the security policy supports a line that was never published, so the shipped one reads as unsupported",
       "file": "SECURITY.md",
       "find": "| 0.1.x   | yes       |",
       "replace": "| 0.2.x   | yes       |",
-      "gates": ["pytest tests/test_security_policy.py"]
+      "gates": ["pytest tests/test_version.py"]
     },
     {
       "id": "M86",

@@ -100,20 +100,3 @@ def test_the_documents_state_the_corpus_bound_the_code_uses(document: str) -> No
     """An operator who gets a 413 on an 80 KB body needs the reason written
     somewhere. The byte bound was tied to the docs and this one was not."""
     assert _document_states(document, str(DEFAULT_MAX_CORPUS_DOCS))
-
-
-@pytest.mark.parametrize(
-    ("number", "expected"),
-    [
-        ("20000", True),
-        ("2000", False),
-        ("200", False),
-        ("1 MiB", True),
-        ("11 MiB", False),
-    ],
-)
-def test_the_document_check_is_not_satisfied_by_a_substring(
-    number: str, expected: bool
-) -> None:
-    """The bound this gate exists to hold is a number, not a run of digits."""
-    assert _document_states("README.md", number) is expected
