@@ -21,7 +21,7 @@ WORKFLOWS = sorted(
 )
 EXPECTED_WORKFLOWS = {"ci.yml", "release.yml"}
 SHA = re.compile(r"^[^@]+@[0-9a-f]{40}$")
-COVERAGE_FLOOR = 85
+COVERAGE_FLOOR = 90
 
 
 def _steps(path: Path) -> list[dict]:

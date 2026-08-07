@@ -247,23 +247,23 @@ class EmbeddingEngine:
             return np.empty((0, 0), dtype="float32")
         self._check_memory_pressure()
         keys = [self._normalize_cache_key(t, namespace) for t in texts]
-        results: list[Any] = [None] * len(texts)
+        vectors: list[Any] = [None] * len(texts)
 
         # Read phase: concurrent readers share the cache.
         with self._lock.read_lock:
             for i, key in enumerate(keys):
                 cached = self._cache.get(key)
                 if cached is not None:
-                    results[i] = cached
+                    vectors[i] = cached
 
-        hits = sum(1 for r in results if r is not None)
+        hits = sum(1 for r in vectors if r is not None)
         with self._stats_lock:
             self._total_requests += len(texts)
             self._cache_hits += hits
 
         # Compute misses OUTSIDE any lock. model.encode is the slow part and
         # must not block concurrent cache hits.
-        miss_indices = [i for i, r in enumerate(results) if r is None]
+        miss_indices = [i for i, r in enumerate(vectors) if r is None]
         if miss_indices:
             # Dedup identical misses within this batch by cache key, so a text
             # repeated in `texts` is encoded ONCE rather than once per occurrence
@@ -288,10 +288,10 @@ class EmbeddingEngine:
                 for k in unique_keys:
                     self._cache[k] = emb_for_key[k]
                 for i in miss_indices:
-                    results[i] = emb_for_key[keys[i]]
+                    vectors[i] = emb_for_key[keys[i]]
                 while len(self._cache) > self._max_cache_size:
                     self._cache.popitem(last=False)
-        return np.stack(results)
+        return np.stack(vectors)
 
     def get_stats(self) -> dict[str, Any]:
         """Returns cache statistics for monitoring."""

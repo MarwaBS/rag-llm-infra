@@ -7,6 +7,8 @@ corpus lives in this process: whatever a request carries, the process holds.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -119,6 +121,21 @@ def test_a_body_over_the_bound_is_refused_before_it_is_parsed(
 ) -> None:
     oversized = {"documents": ["x" * (DEFAULT_MAX_BODY_BYTES + 1)]}
     assert authed.post("/index", json=oversized).status_code == 413
+
+
+@pytest.mark.parametrize("declared", ["abc", "-1", "1 000", "0x10"])
+def test_a_content_length_that_is_not_a_byte_count_is_refused(
+    declared: str, configured: None
+) -> None:
+    """The header is attacker-controlled. `int()` raises on the first three, and
+    a negative passes `> limit` and skips the bound: measured 201 before this."""
+    body = json.dumps({"documents": ["d"]})
+    response = authed.post(
+        "/index",
+        content=body,
+        headers={"content-type": "application/json", "content-length": declared},
+    )
+    assert response.status_code == 400, response.text
 
 
 def test_a_body_under_the_bound_is_accepted(configured: None) -> None:

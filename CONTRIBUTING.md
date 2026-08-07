@@ -14,7 +14,7 @@ mypy src eval tests
 mypy scripts benchmarks
 codespell
 pip-audit --strict
-pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-fail-under=85
+pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-fail-under=90
 python -m eval.retrieval_eval
 python -m eval.generation_eval
 python example.py

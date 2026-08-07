@@ -115,7 +115,17 @@ async def bound_request_body(
         declared = request.headers.get("content-length")
         if declared is None:
             return JSONResponse({"detail": "Content-Length required"}, status_code=411)
-        if int(declared) > _max_body_bytes():
+        # The header is attacker-controlled: `int()` raises on garbage, and a
+        # negative value passes the comparison below and skips the bound.
+        try:
+            length = int(declared)
+        except ValueError:
+            length = -1
+        if length < 0:
+            return JSONResponse(
+                {"detail": "Content-Length is not a byte count"}, status_code=400
+            )
+        if length > _max_body_bytes():
             return JSONResponse({"detail": "request body too large"}, status_code=413)
     return await call_next(request)
 

@@ -8,7 +8,7 @@
 
 | Gate | Result |
 | --- | --- |
-| `pytest --cov-fail-under=85` | |
+| `pytest --cov-fail-under=90` | |
 | `ruff check .` / `ruff format --check .` | |
 | `mypy src eval tests` / `mypy scripts benchmarks` | |
 | `codespell` / `pip-audit --strict` | |

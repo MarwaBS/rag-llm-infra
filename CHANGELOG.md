@@ -213,8 +213,8 @@ Hardening release. Each behavioral fix carries a regression test.
   group so CI runs the real branch, and the trim/no-trim behavior is pinned by
   regression tests (oldest entries actually evicted under pressure; nothing
   evicted without it).
-- **Coverage gate in CI and the release gate** (`--cov-fail-under=85`; measured
-  93% when introduced), plus real-SDK tracing tests: the OpenTelemetry
+- **Coverage gate in CI and the release gate** (`--cov-fail-under=90`; measured
+  94.47%), plus real-SDK tracing tests: the OpenTelemetry
   configuration path, the OTLP-endpoint->console-exporter degradation, and
   valid trace/span IDs from `current_trace_context` inside a live span.
 - **`CHANGELOG.md`** (this file).

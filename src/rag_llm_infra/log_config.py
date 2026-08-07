@@ -87,10 +87,10 @@ class _JsonFormatter(logging.Formatter):
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         # Forward any extra={} fields attached by the caller
-        for key, val in record.__dict__.items():
+        for key, value in record.__dict__.items():
             if key.startswith("_") or key in _RECORD_OWN_FIELDS:
                 continue
-            payload[key] = val
+            payload[key] = value
         return json.dumps(payload, default=str)
 
 

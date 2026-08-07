@@ -493,7 +493,7 @@
       "id": "M62",
       "why": "the request body loses its bound, so one call can hold as much memory as it likes",
       "file": "src/rag_llm_infra/serve.py",
-      "find": "        if int(declared) > _max_body_bytes():",
+      "find": "        if length > _max_body_bytes():",
       "replace": "        if False:",
       "gates": ["pytest tests/test_serve_auth.py"]
     },

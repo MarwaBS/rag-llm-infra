@@ -4,7 +4,7 @@ name: Release to PyPI
 # Requires a repository secret `PYPI_API_TOKEN` (a PyPI API token).
 #
 # Publishing is GATED and uses build-once / promote: the `gate` job runs lint,
-# format, mypy, pytest at the same 85% floor, both eval gates, and the mutation
+# format, mypy, pytest at the same 90% floor, both eval gates, and the mutation
 # replay, over the same coverage scope. It differs from the suite guarding `main`
 # in exactly three ways: 3.12 only, where `main` runs the 3.12 + 3.13 matrix, no
 # end-to-end example run, and no `image` job, so nothing on this path builds the
@@ -64,7 +64,7 @@ jobs:
         run: pip-audit --strict --progress-spinner off
 
       - name: Tests (same coverage floor as CI)
-        run: pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-report=term-missing --cov-fail-under=85
+        run: pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-report=term-missing --cov-fail-under=90
       - name: Retrieval eval gate (recall@1 / MRR)
         run: python -m eval.retrieval_eval
       - name: Generation eval gate (groundedness / faithfulness)
