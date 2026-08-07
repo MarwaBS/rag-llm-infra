@@ -6,12 +6,14 @@ no explanation.
 
 Bounded: this finds names written as literals that reach `os.getenv`, directly or
 through a helper that forwards one of its parameters. A name assembled at runtime
-would be missed.
+would be missed, and so would one read through `os.environ` rather than
+`os.getenv`. The package uses only `os.getenv` today.
 """
 
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -70,7 +72,27 @@ def test_the_sweep_finds_the_variables_it_is_meant_to_check() -> None:
     assert "NFKC" not in read, "a non-env literal leaked into the sweep"
 
 
+def _documented_variables() -> set[str]:
+    """Names `.env.example` actually declares, commented-out lines included.
+
+    Membership, not containment: `X in text` also passes for a name that is only
+    a prefix of some other entry, so a variable could go undocumented and still
+    satisfy the gate.
+    """
+    return {
+        match.group(1)
+        for line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
+        if (match := re.match(r"\s*#?\s*([A-Z][A-Z0-9_]*)=", line))
+    }
+
+
+def test_the_example_parses_into_names() -> None:
+    """A parser that matched nothing would document every variable vacuously."""
+    assert {"RAG_API_KEY", "QDRANT_URL"} <= _documented_variables()
+
+
 @pytest.mark.parametrize("variable", sorted(_read_variables()))
 def test_every_variable_the_package_reads_is_documented(variable: str) -> None:
-    example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    assert variable in example, f"{variable} is read by {_read_variables()[variable]}"
+    assert variable in _documented_variables(), (
+        f"{variable} is read by {_read_variables()[variable]}"
+    )

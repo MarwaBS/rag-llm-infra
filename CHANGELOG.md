@@ -158,9 +158,9 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
 
 ### Changed
 - **`auto` prefers FAISS for a measured reason.** `benchmarks/backend_crossover.py`
-  times both backends: at 384 dimensions NumPy is marginally faster at a hundred
-  documents and FAISS wins from a thousand upward, by roughly 1.8x at a hundred
-  thousand. Bounded to the machine that ran it, which the script prints.
+  times both backends at 384 dimensions. FAISS is ahead at every size the script
+  tries, from a hundred documents to a hundred thousand. Bounded to the host the
+  script prints, which was CPython 3.13.13 with numpy 2.4.6 on Windows 11.
 - **The message shape is a `TypedDict`, and the type gate covers `eval` and
   `tests`.** `list[dict[str, Any]]` accepted a misspelled key, an integer role
   and a message with no role; `ignore_missing_imports` was global, which also
@@ -215,7 +215,7 @@ Hardening release. Each behavioral fix carries a regression test.
   evicted without it).
 - **Coverage gate in CI and the release gate** (`--cov-fail-under=85`; measured
   93% when introduced), plus real-SDK tracing tests: the OpenTelemetry
-  configuration path, the OTLP-endpoint→console-exporter degradation, and
+  configuration path, the OTLP-endpoint->console-exporter degradation, and
   valid trace/span IDs from `current_trace_context` inside a live span.
 - **`CHANGELOG.md`** (this file).
 

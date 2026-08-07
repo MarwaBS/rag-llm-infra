@@ -23,13 +23,14 @@ Three implementations ship:
 The `get_vector_store()` factory selects an implementation by name.
 Default is "auto" -> FAISS when available, NumPy otherwise.
 
-That preference is measured, not assumed. On the machine that ran
-`benchmarks/backend_crossover.py` (384 dims, k=5, brute-force inner product),
-NumPy is marginally faster at a hundred documents (0.14 ms against 0.19), and
-FAISS wins from a thousand upward, by roughly 1.8x at a hundred thousand. So
-`auto` is the right default above about a thousand documents, and below that the
-difference is a fraction of a millisecond. Both return the same rows; only the
-tie order differs, which `search` documents.
+That preference is measured, not assumed. `benchmarks/backend_crossover.py`
+(384 dims, k=5, brute-force inner product) puts FAISS ahead at every size it
+tries: 0.02 ms against 0.04 at a hundred documents, 0.05 against 0.35 at a
+thousand, 7.2 against 13.9 at a hundred thousand. So `auto` is right wherever it
+is asked, and below a thousand documents the NumPy fallback costs a caller a
+fraction of a millisecond. Bounded to the host the script prints, which was
+CPython 3.13.13 with numpy 2.4.6 on Windows 11. Both backends return the same
+rows; only the tie order differs, which `search` documents.
 """
 
 from __future__ import annotations
@@ -95,10 +96,10 @@ try:
     from .evidence_index import FAISS_AVAILABLE as _FAISS_AVAILABLE
 
     FAISS_AVAILABLE: bool = _FAISS_AVAILABLE
-except ImportError:  # pragma: no cover - proven by test_broken_optional_deps
+except ImportError:
     logger.debug("faiss capability flag unreadable; assuming unavailable")
     FAISS_AVAILABLE = False
-except Exception as exc:  # pragma: no cover - proven by test_broken_optional_deps
+except Exception as exc:
     # A ctypes load inside the package raises OSError, not ImportError.
     logger.warning("FAISS is installed but failed to load: %s", exc)
     FAISS_AVAILABLE = False
@@ -113,12 +114,13 @@ try:
     from qdrant_client import models as qdrant_models
 
     QDRANT_AVAILABLE: bool = True
-except ImportError:  # pragma: no cover - proven by test_broken_optional_deps
+except ImportError:
     logger.debug("qdrant-client not installed; the qdrant backend is unavailable")
     QDRANT_AVAILABLE = False
     QdrantClient = None  # type: ignore[misc,assignment]
     qdrant_models = None  # type: ignore[assignment]
-except Exception as exc:  # pragma: no cover - proven by test_broken_optional_deps
+except Exception as exc:  # pragma: no cover - runs only in the subprocess
+    # test_broken_optional_deps spawns, which in-process coverage cannot see.
     logger.warning("qdrant-client is installed but failed to load: %s", exc)
     QDRANT_AVAILABLE = False
     QdrantClient = None  # type: ignore[misc,assignment]
