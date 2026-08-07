@@ -90,7 +90,7 @@ jobs:
 
       - name: The image is not carrying the build context
         run: |
-          # Before .dockerignore, `COPY . .` admitted a 315 MiB virtualenv.
+          # Before .dockerignore, `COPY . .` admitted the whole virtualenv.
           size="$(docker image inspect rag-llm-infra:ci --format '{{.Size}}')"
           echo "image size: $((size / 1024 / 1024)) MiB"
           test "$size" -lt 838860800 || { echo "::error::image over 800 MiB"; exit 1; }

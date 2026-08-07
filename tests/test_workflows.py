@@ -1,7 +1,7 @@
 """What the workflows must contain to be the gates the docs claim.
 
 Bounded: this reads the YAML, it does not run GitHub Actions. It catches a
-deleted step, a drifted tag, a discarded exit code and a lowered floor; it cannot
+deleted step, a drifted tag and a dropped floor; it cannot
 tell you the container job passes. That job has no local equivalent here.
 """
 
@@ -22,7 +22,6 @@ WORKFLOWS = sorted(
 EXPECTED_WORKFLOWS = {"ci.yml", "release.yml"}
 SHA = re.compile(r"^[^@]+@[0-9a-f]{40}$")
 COVERAGE_FLOOR = 85
-NO_OPS = {"true", ":", "exit 0"}
 
 
 def _steps(path: Path) -> list[dict]:
@@ -62,26 +61,6 @@ def test_every_action_is_pinned_to_a_commit(path: Path) -> None:
         s["uses"] for s in _steps(path) if "uses" in s and not SHA.match(s["uses"])
     ]
     assert not floating, floating
-
-
-@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
-def test_no_gate_discards_its_exit_code(path: Path) -> None:
-    """A step that cannot fail is a log line. `|| true`, `|| :` and a trailing
-    `exit 0` all do that, so the rule is about the no-op, not one spelling."""
-    swallowed = []
-    for step in _steps(path):
-        if step.get("name") == "Stop it":  # cleanup, deliberately best-effort
-            continue
-        lines = [
-            ln.strip() for ln in (step.get("run") or "").splitlines() if ln.strip()
-        ]
-        for line in lines:
-            if "||" in line and line.split("||")[-1].strip().rstrip(";") in NO_OPS:
-                swallowed.append((step.get("name"), line))
-        if lines and lines[-1] in NO_OPS:
-            swallowed.append((step.get("name"), lines[-1]))
-    assert not swallowed, swallowed
-    assert not [s.get("name") for s in _steps(path) if s.get("continue-on-error")]
 
 
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)

@@ -62,7 +62,7 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   network clients and the protocol had no way to release them, so a caller
   holding the protocol type could not close one. `FallbackLLM` closes every
   backend in its chain, including ones already tripped by budget exhaustion.
-- **`.dockerignore`, denying by default.** `COPY . .` was admitting a 315 MiB
+- **`.dockerignore`, denying by default.** `COPY . .` was admitting the whole
   virtualenv and the git history. The rules admit `pyproject.toml`, `README.md`,
   `LICENSE` and `src/` and nothing else; a test assembles a directory from those
   paths alone and builds the wheel in it, so a rule set too tight fails here
@@ -98,7 +98,7 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   and its answer is discarded, because Python cannot interrupt a blocking socket
   read in another thread. The async path uses `asyncio.wait_for`, which cancels.
 - **Memory pressure raised the cache limit.** `max(100, limit * 0.5)` meant any
-  configured limit below 200 grew under pressure (measured: 50 became 100), and
+  configured limit below 100 grew under pressure (measured: 50 became 100), and
   it never came back. The trim now halves the configured ceiling, never exceeds
   it, and restores it when pressure clears.
 - **Equal scores came back in whatever order the partition left them.**
@@ -106,8 +106,8 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   by the lower document index. The alternative, a full `lexsort`, which would
   also fix *which* tied documents are selected, was measured first. It would run
   on every query, not only tied ones, and on distinct scores at a million
-  documents it costs about 20x (21.7x on the machine that measured it; 1.8x when
-  every score ties). So the selection stays unspecified and the protocol says so
+  documents it costs about 20x, falling to about 2x when every score ties. So
+  the selection stays unspecified and the protocol says so
   rather than implying otherwise. Reproduce with `benchmarks/topk_tie_cost.py`,
   which prints its interpreter, numpy version and platform.
 - **The JSON log line carried logging's own fields.** The formatter dropped a

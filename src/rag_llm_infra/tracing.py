@@ -6,7 +6,9 @@ Usage (call once at application startup)::
     from rag_llm_infra import configure_tracing
     configure_tracing()
 
-Traces flow across the request path: retrieval -> LLM call -> downstream work.
+This configures a provider and hands out tracers. It opens no spans of its own:
+the caller decides what to instrument. `log_config` reads the active span, so a
+record carries a trace id only inside a span the caller opened.
 
 Exporters (controlled by environment variables):
     OTEL_EXPORTER_OTLP_ENDPOINT  : set to send to Jaeger/Tempo/Honeycomb/etc.

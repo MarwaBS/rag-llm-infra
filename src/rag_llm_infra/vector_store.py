@@ -25,13 +25,12 @@ Default is "auto" -> FAISS when available, NumPy otherwise.
 
 That preference is measured, not assumed. `benchmarks/backend_crossover.py`
 (384 dims, k=5, brute-force inner product) puts FAISS ahead at every size it
-tries, from a hundred documents to a hundred thousand, by between 2x and 7x.
-So `auto` is right wherever it is asked, and below a thousand documents either
-backend answers in under half a millisecond. Per-size millisecond figures are
-not quoted here because they move 10-30% between runs on one host; run the
-script for current numbers. Bounded to the host it prints, which was CPython
-3.13.13 with numpy 2.4.6 on Windows 11. Both backends return the same rows;
-only the tie order differs, which `search` documents.
+tries, from a hundred documents to a hundred thousand. So `auto` is right
+wherever it is asked, and below a thousand documents either backend answers in
+under half a millisecond. No ratio is quoted: across nine runs on one host the
+margin moved between 1.6x and 7x depending on size and run, so run the script
+for current numbers. Both backends return the same rows; only the tie order
+differs, which `search` documents.
 """
 
 from __future__ import annotations
@@ -175,9 +174,9 @@ class VectorStoreProtocol(Protocol):
 
     @property
     def is_native(self) -> bool:
-        """True if backed by a native vector index (e.g., FAISS), False if
-        backed by a plain numpy matrix. Used by the cache layer to decide
-        whether the version stamp must match across reloads."""
+        """True if backed by a native vector index (e.g. FAISS), False for a
+        plain numpy matrix. A caller that persists an index needs to know
+        whether the bytes depend on a native library's version."""
         ...
 
     def reset(self) -> None:
@@ -254,8 +253,9 @@ class FAISSVectorStore:
 class NumpyVectorStore:
     """Pure-numpy fallback. Stores `(N, D)` row-normalized matrix and runs
     cosine similarity via a single matmul. Every query scores every vector,
-    so cost is linear in corpus size. No corpus size at which FAISS overtakes
-    it has been measured here; pick a backend by measuring your own corpus.
+    so cost is linear in corpus size. FAISS was ahead at every size
+    `benchmarks/backend_crossover.py` measures, so this is the fallback rather
+    than a choice; measure your own corpus before relying on either.
     """
 
     backend_name = "numpy"

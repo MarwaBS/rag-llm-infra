@@ -33,8 +33,8 @@ Two caveats qualify that.
 
 **`rag_llm_infra.serve` authenticates with a shared key, and nothing else.**
 Installed with the `serve` extra and used as the `Dockerfile`'s entrypoint, it
-serves `/index` and `/query` behind a credential and `/health`, `/docs`, `/redoc`
-and `/openapi.json` without one. The two POST routes require `X-API-Key` to equal
+serves `/index` and `/query` behind a credential and five routes without one:
+`/health`, `/docs`, `/docs/oauth2-redirect`, `/redoc` and `/openapi.json`. The two POST routes require `X-API-Key` to equal
 `RAG_API_KEY`, compared as bytes with `secrets.compare_digest`, and answer 503
 when that variable is unset. There is no configuration in which they serve
 openly. A test pins that open list exactly and requires every other route to hold

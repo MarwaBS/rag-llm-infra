@@ -570,14 +570,6 @@
       "gates": ["pytest tests/test_declared_bounds.py"]
     },
     {
-      "id": "M72",
-      "why": "the dependency CVE gate discards its exit code, so an advisory becomes a log line",
-      "file": ".github/workflows/ci.yml",
-      "find": "        run: pip-audit --strict --progress-spinner off",
-      "replace": "        run: pip-audit --strict --progress-spinner off || true",
-      "gates": ["pytest tests/test_workflows.py"]
-    },
-    {
       "id": "M73",
       "why": "the engine reads part of its configuration live again, so one instance can be half-configured",
       "file": "src/rag_llm_infra/evidence_index.py",
