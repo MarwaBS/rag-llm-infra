@@ -20,7 +20,7 @@ def embed(texts: list[str]) -> np.ndarray:
     """Embed `texts` into an `(N, EMBED_DIM)` float32 matrix."""
     vecs = np.zeros((len(texts), EMBED_DIM), dtype="float32")
     for row, text in enumerate(texts):
-        for token in re.findall(r"[a-z]+", text.lower()):
+        for token in re.findall(r"[a-z0-9]+", text.lower()):
             bucket = int(hashlib.md5(token.encode()).hexdigest(), 16) % EMBED_DIM
             vecs[row, bucket] += 1.0
     return vecs
