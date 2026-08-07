@@ -123,12 +123,26 @@ def test_a_body_over_the_bound_is_refused_before_it_is_parsed(
     assert authed.post("/index", json=oversized).status_code == 413
 
 
-@pytest.mark.parametrize("declared", ["abc", "-1", "1 000", "0x10"])
+# Each parses through `int()` or `isdigit()` while being an illegal
+# Content-Length. U+00B2 is latin-1, so it reaches the middleware as a
+# header, is `isdigit()`, and raises inside `int()`.
+NOT_A_BYTE_COUNT = [
+    b"abc",
+    b"-1",
+    b"1 000",
+    b"0x10",
+    b"1_0",
+    b"+5",
+    b" 12 ",
+    b"0_10",
+    b"\xb2",
+]
+
+
+@pytest.mark.parametrize("declared", NOT_A_BYTE_COUNT)
 def test_a_content_length_that_is_not_a_byte_count_is_refused(
-    declared: str, configured: None
+    declared: bytes, configured: None
 ) -> None:
-    """The header is attacker-controlled. `int()` raises on the first three, and
-    a negative passes `> limit` and skips the bound: measured 201 before this."""
     body = json.dumps({"documents": ["d"]})
     response = authed.post(
         "/index",
@@ -136,6 +150,21 @@ def test_a_content_length_that_is_not_a_byte_count_is_refused(
         headers={"content-type": "application/json", "content-length": declared},
     )
     assert response.status_code == 400, response.text
+
+
+@pytest.mark.parametrize("declared", NOT_A_BYTE_COUNT)
+def test_no_declared_length_can_admit_a_body_over_the_bound(
+    declared: bytes, configured: None
+) -> None:
+    """The property, not the spellings: whatever the header says, a body past
+    the bound must never be indexed. `-1` and `1_0` each returned 201 before."""
+    oversized = json.dumps({"documents": ["x" * (DEFAULT_MAX_BODY_BYTES + 1)]})
+    response = authed.post(
+        "/index",
+        content=oversized,
+        headers={"content-type": "application/json", "content-length": declared},
+    )
+    assert response.status_code != 201, response.status_code
 
 
 def test_a_body_under_the_bound_is_accepted(configured: None) -> None:

@@ -493,7 +493,7 @@
       "id": "M62",
       "why": "the request body loses its bound, so one call can hold as much memory as it likes",
       "file": "src/rag_llm_infra/serve.py",
-      "find": "        if length > _max_body_bytes():",
+      "find": "        if int(declared) > _max_body_bytes():",
       "replace": "        if False:",
       "gates": ["pytest tests/test_serve_auth.py"]
     },
@@ -712,6 +712,14 @@
       "find": "    _, indices = store.search(embed([query]), k=min(k, len(docs)))",
       "replace": "    _, indices = store.search(embed([query]), k=1)",
       "gates": ["pytest tests/test_example.py"]
+    },
+    {
+      "id": "M92",
+      "why": "the exporter endpoint stops being read, so a configured collector is ignored and every span goes to the console",
+      "file": "src/rag_llm_infra/tracing.py",
+      "find": "    otlp_endpoint = os.getenv(\"OTEL_EXPORTER_OTLP_ENDPOINT\", \"\")",
+      "replace": "    otlp_endpoint = \"\"",
+      "gates": ["pytest tests/test_tracing.py"]
     },
     {
       "id": "C1",

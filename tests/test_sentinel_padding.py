@@ -7,7 +7,7 @@ document instead of a miss.
 
 from __future__ import annotations
 
-import re
+import ast
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,7 +45,7 @@ def test_the_control_shows_a_full_row_is_not_padded() -> None:
 
 
 REPO = Path(__file__).resolve().parent.parent
-LOOKUP = re.compile(r"^.*\bfor \w+ in (?:idx|indices)\[0\].*$", re.M)
+INDEX_NAMES = {"idx", "indices"}
 
 
 def _sources() -> list[Path]:
@@ -64,8 +64,75 @@ def _sources() -> list[Path]:
     return [REPO / rel for rel in listed if not rel.startswith("tests/")]
 
 
+def _over_a_result_row(comprehension: ast.comprehension) -> bool:
+    """Whether this iterates the first row of a `search` result."""
+    iterated = comprehension.iter
+    return (
+        isinstance(iterated, ast.Subscript)
+        and isinstance(iterated.value, ast.Name)
+        and iterated.value.id in INDEX_NAMES
+    )
+
+
+def _int_literal(node: ast.expr) -> int | None:
+    """`-1` parses as a unary minus over `1`, not as a negative constant."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        inner = _int_literal(node.operand)
+        return None if inner is None else -inner
+    return None
+
+
+def _excludes_negatives(comprehension: ast.comprehension) -> bool:
+    """Whether a condition rules out a negative value of the loop variable.
+
+    Read as a comparison against the loop target, not as text. `">= 0" in line`
+    credits `if len(docs) >= 0`, which filters nothing, and rejects `if i > -1`,
+    which filters correctly.
+    """
+    if not isinstance(comprehension.target, ast.Name):
+        return False
+    target = comprehension.target.id
+    for condition in comprehension.ifs:
+        if not isinstance(condition, ast.Compare) or len(condition.ops) != 1:
+            continue
+        left, operator, right = (
+            condition.left,
+            condition.ops[0],
+            condition.comparators[0],
+        )
+        named_left = isinstance(left, ast.Name) and left.id == target
+        named_right = isinstance(right, ast.Name) and right.id == target
+        floor = _int_literal(right if named_left else left)
+        if floor is None:
+            continue
+        if named_left and (
+            (isinstance(operator, ast.GtE) and floor == 0)
+            or (isinstance(operator, ast.Gt) and floor == -1)
+        ):
+            return True
+        if named_right and (
+            (isinstance(operator, ast.LtE) and floor == 0)
+            or (isinstance(operator, ast.Lt) and floor == -1)
+        ):
+            return True
+    return False
+
+
+def _row_comprehensions() -> list[tuple[str, ast.comprehension]]:
+    found = []
+    for path in _sources():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            for comprehension in getattr(node, "generators", []):
+                if _over_a_result_row(comprehension):
+                    found.append((path.name, comprehension))
+    return found
+
+
 def test_the_sweep_finds_the_lookups_it_is_meant_to_check() -> None:
-    found = {p.name for p in _sources() if LOOKUP.search(p.read_text(encoding="utf-8"))}
+    found = {name for name, _ in _row_comprehensions()}
     assert {
         "serve.py",
         "example.py",
@@ -77,9 +144,8 @@ def test_the_sweep_finds_the_lookups_it_is_meant_to_check() -> None:
 def test_every_index_lookup_outside_the_tests_filters_the_sentinel() -> None:
     """An unfiltered `-1` indexes the last document and returns it as a match."""
     unfiltered = [
-        f"{path.name}: {line.strip()}"
-        for path in _sources()
-        for line in LOOKUP.findall(path.read_text(encoding="utf-8"))
-        if ">= 0" not in line
+        name
+        for name, comprehension in _row_comprehensions()
+        if not _excludes_negatives(comprehension)
     ]
     assert not unfiltered, unfiltered

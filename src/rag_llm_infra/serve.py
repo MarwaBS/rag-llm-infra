@@ -18,8 +18,8 @@ far more resident than it costs on the wire. A request body over
 `RAG_MAX_BODY_BYTES` (1 MiB by default) is refused with 413, and a POST without
 a `Content-Length` with 411. A corpus over `RAG_MAX_CORPUS_DOCS` (20000) is
 refused with 413 too. `_demo.embed` gives every document one `EMBED_DIM`-wide
-float32 row whatever its length, so 262139 three-byte documents fit inside a
-1 MiB body and materialise a 128 MiB matrix. `k` is capped at the corpus size,
+float32 row whatever its length, so 262140 one-byte documents fit inside a 1 MiB
+body and materialise a 128 MiB matrix, 128x what the byte bound admitted. `k` is capped at the corpus size,
 which bounds a response only because the corpus itself is bounded.
 
 This module configures neither logging nor tracing. The command above hands the
@@ -115,17 +115,16 @@ async def bound_request_body(
         declared = request.headers.get("content-length")
         if declared is None:
             return JSONResponse({"detail": "Content-Length required"}, status_code=411)
-        # The header is attacker-controlled: `int()` raises on garbage, and a
-        # negative value passes the comparison below and skips the bound.
-        try:
-            length = int(declared)
-        except ValueError:
-            length = -1
-        if length < 0:
+        # RFC 9110 section 8.6: one or more ASCII digits and nothing else.
+        # `int()` is wider and admits what it should refuse: "+5", "1_0" and
+        # surrounding whitespace all parse, and a 3 MiB body declaring "1_0"
+        # would clear the bound below. `isdigit()` alone admits non-ASCII
+        # digits, which `int()` also parses.
+        if not (declared.isascii() and declared.isdigit()):
             return JSONResponse(
                 {"detail": "Content-Length is not a byte count"}, status_code=400
             )
-        if length > _max_body_bytes():
+        if int(declared) > _max_body_bytes():
             return JSONResponse({"detail": "request body too large"}, status_code=413)
     return await call_next(request)
 

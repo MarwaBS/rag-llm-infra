@@ -39,7 +39,7 @@ serves `/index` and `/query` behind a credential and five routes without one:
 when that variable is unset. There is no configuration in which they serve
 openly. A test pins that open list exactly and requires every other route to hold
 the credential dependency by identity. `/health` returns only `{"status": "ok"}`;
-the other three describe the API's shape, not its data.
+the other four describe the API's shape, not its data.
 
 Two bounds. A request body over `RAG_MAX_BODY_BYTES` (1 MiB by default) is
 refused with 413 before being read, and a POST with no `Content-Length` with 411.

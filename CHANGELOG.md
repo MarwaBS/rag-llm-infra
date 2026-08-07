@@ -39,7 +39,7 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   and a POST with no `Content-Length` with 411. Measured before: a 20 MB body was
   accepted. Separately a corpus over `RAG_MAX_CORPUS_DOCS` (20000) is refused:
   every document becomes one `EMBED_DIM`-wide float32 row whatever its length, so
-  262139 three-byte documents fit in a body under 1 MiB and materialise a 128 MiB
+  262140 one-byte documents fit in a body under 1 MiB and materialise a 128 MiB
   matrix, 128x what the body bound admitted.
 - **The credential path cannot be made to 500.** `secrets.compare_digest` raises
   `TypeError` on a non-ASCII `str`, and the header is attacker-controlled;

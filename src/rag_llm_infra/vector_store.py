@@ -27,10 +27,9 @@ That preference is measured, not assumed. `benchmarks/backend_crossover.py`
 (384 dims, k=5, brute-force inner product) puts FAISS ahead at every size it
 tries, from a hundred documents to a hundred thousand. So `auto` is right
 wherever it is asked, and below a thousand documents either backend answers in
-under half a millisecond. No ratio is quoted: across nine runs on one host the
-margin moved between 1.6x and 7x depending on size and run, so run the script
-for current numbers. Both backends return the same rows; only the tie order
-differs, which `search` documents.
+under half a millisecond. The margin itself moves too much between runs on one
+host to quote, so run the script for it. Both backends return the same rows;
+only the tie order differs, which `search` documents.
 """
 
 from __future__ import annotations

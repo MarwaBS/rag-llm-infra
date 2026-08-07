@@ -5,6 +5,7 @@ The OTel API + SDK ship in the dev group, so the REAL configuration path
 CI, not just the import-guarded fallbacks.
 """
 
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -56,19 +57,42 @@ class TestConfigureTracing:
         finally:
             tracing._CONFIGURED = original
 
-    def test_configure_tracing_with_otlp_endpoint(self):
+    def test_an_endpoint_takes_the_otlp_branch_not_the_console_default(self, caplog):
+        """`_CONFIGURED is True` is set by both branches, so it cannot tell them
+        apart: deleting the read of OTEL_EXPORTER_OTLP_ENDPOINT left every
+        assertion here green. The console default announces itself, and that
+        line must be absent when an endpoint is set."""
         import rag_llm_infra.tracing as tracing
 
         original = tracing._CONFIGURED
         tracing._CONFIGURED = False
         try:
-            with patch.dict(
-                "os.environ", {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"}
+            with (
+                caplog.at_level(logging.INFO, logger="rag_llm_infra.tracing"),
+                patch.dict(
+                    "os.environ",
+                    {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"},
+                ),
             ):
                 tracing.configure_tracing(service_name="test")
-                # Whether the OTLP exporter imports or falls back to the console
-                # one, configuring is what must have happened.
-                assert tracing._CONFIGURED is True
+            assert tracing._CONFIGURED is True
+            assert "ConsoleSpanExporter active" not in caplog.text, caplog.text
+        finally:
+            tracing._CONFIGURED = original
+
+    def test_no_endpoint_takes_the_console_default(self, caplog):
+        """The other half: without one, that line must be present."""
+        import rag_llm_infra.tracing as tracing
+
+        original = tracing._CONFIGURED
+        tracing._CONFIGURED = False
+        try:
+            with (
+                caplog.at_level(logging.INFO, logger="rag_llm_infra.tracing"),
+                patch.dict("os.environ", {"OTEL_EXPORTER_OTLP_ENDPOINT": ""}),
+            ):
+                tracing.configure_tracing(service_name="test")
+            assert "ConsoleSpanExporter active" in caplog.text, caplog.text
         finally:
             tracing._CONFIGURED = original
 
@@ -88,16 +112,16 @@ class TestConfigureTracingWithSdk:
         finally:
             tracing._CONFIGURED = original
 
-    def test_otlp_endpoint_without_grpc_exporter_falls_back_to_console(self):
-        """With an OTLP endpoint set but the grpc exporter package absent,
-        configuration must degrade to the ConsoleSpanExporter and still complete
-        (the degrade-don't-crash contract), not raise."""
+    def test_otlp_endpoint_without_grpc_exporter_falls_back_to_console(self, caplog):
+        """With an endpoint set but the grpc exporter absent, configuration must
+        degrade rather than raise, and say which exporter it settled on."""
         import rag_llm_infra.tracing as tracing
 
         original = tracing._CONFIGURED
         tracing._CONFIGURED = False
         try:
             with (
+                caplog.at_level(logging.WARNING, logger="rag_llm_infra.tracing"),
                 patch.dict(
                     "os.environ",
                     {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"},
@@ -109,6 +133,7 @@ class TestConfigureTracingWithSdk:
             ):
                 tracing.configure_tracing(service_name="test-otlp-fallback")
             assert tracing._CONFIGURED is True
+            assert "falling back to ConsoleSpanExporter" in caplog.text, caplog.text
         finally:
             tracing._CONFIGURED = original
 
