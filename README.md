@@ -47,7 +47,9 @@ uvicorn rag_llm_infra.serve:app
 
 > `/index` and `/query` require `X-API-Key`, and answer 503 while `RAG_API_KEY`
 > is unset — there is no open mode. `/health` stays open for container probes.
-> Bodies over 1 MiB are refused. `uvicorn` binds `127.0.0.1` unless `--host` or
+> Bodies over 1 MiB and corpora over 20000 documents are refused by default —
+> each document costs a fixed-width vector however short it is, so bytes on the
+> wire do not bound memory. `uvicorn` binds `127.0.0.1` unless `--host` or
 > `UVICORN_HOST` says otherwise; the container passes `--host 0.0.0.0` and
 > publishes 8000. One shared key, no rate limiting — see [SECURITY.md](SECURITY.md).
 

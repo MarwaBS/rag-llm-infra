@@ -15,6 +15,7 @@ from rag_llm_infra.serve import (
     DEFAULT_MAX_BODY_BYTES,
     DEFAULT_MAX_CORPUS_DOCS,
     app,
+    require_api_key,
 )
 
 KEY = "correct-horse"
@@ -42,27 +43,36 @@ OPEN_ROUTES = {
     "/docs/oauth2-redirect": "part of the docs UI",
     "/redoc": "renders /openapi.json",
 }
+GUARDED_ROUTES = {"/index", "/query"}
 
 
-def test_every_route_is_guarded_unless_it_is_listed_here() -> None:
-    """Enumerating the routes that exist today gates nothing about the next one.
+def _route_paths() -> tuple[set[str], set[str]]:
+    """(guarded, open) by dependency identity, not by its name.
 
-    A route added without the dependency ships open, and the two guarded routes
-    keep passing their own tests while it does.
+    A function whose `__name__` is set to "require_api_key" is not the guard;
+    comparing names credits the label instead of the thing.
     """
-    guarded = []
-    open_routes = []
+    guarded: set[str] = set()
+    open_paths: set[str] = set()
     for route in app.routes:
         path = getattr(route, "path", None)
         if path is None:
             continue
-        names = {d.dependency.__name__ for d in getattr(route, "dependencies", [])}
-        (guarded if "require_api_key" in names else open_routes).append(path)
+        dependencies = getattr(route, "dependencies", [])
+        holds = any(d.dependency is require_api_key for d in dependencies)
+        (guarded if holds else open_paths).add(path)
+    return guarded, open_paths
 
-    assert set(open_routes) <= set(OPEN_ROUTES), sorted(
-        set(open_routes) - set(OPEN_ROUTES)
-    )
-    assert guarded, "no route carries the credential dependency at all"
+
+def test_the_open_routes_are_exactly_these() -> None:
+    """The list is the exemption, so widening it must be a visible edit."""
+    _, open_paths = _route_paths()
+    assert open_paths == set(OPEN_ROUTES)
+
+
+def test_every_other_route_holds_the_credential_dependency() -> None:
+    guarded, _ = _route_paths()
+    assert guarded == GUARDED_ROUTES
 
 
 @pytest.mark.parametrize(

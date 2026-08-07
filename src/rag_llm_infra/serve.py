@@ -47,9 +47,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_BODY_BYTES = 1024 * 1024
 # A document becomes one EMBED_DIM float32 row, so the corpus matrix is
-# docs * EMBED_DIM * 4 bytes. At 128 dims that is 512 bytes per document
-# however short the document is, which is why the body bound does not bound
-# memory. 20000 documents is a 10 MiB matrix.
+# docs * EMBED_DIM * 4 bytes. At 128 dims that is 512 bytes per document however
+# short it is, which is why the body bound does not bound memory. 20000
+# documents is 10,240,000 bytes of vectors.
 DEFAULT_MAX_CORPUS_DOCS = 20_000
 
 # Sourced from the package so the served version cannot drift from the wheel's.

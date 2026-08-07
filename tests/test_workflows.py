@@ -15,9 +15,14 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 CI = ROOT / ".github/workflows/ci.yml"
-WORKFLOWS = sorted((ROOT / ".github/workflows").glob("*.yml"))
+# Actions runs both extensions, so checking only one leaves the other ungated.
+WORKFLOWS = sorted(
+    p for p in (ROOT / ".github/workflows").iterdir() if p.suffix in {".yml", ".yaml"}
+)
+EXPECTED_WORKFLOWS = {"ci.yml", "release.yml"}
 SHA = re.compile(r"^[^@]+@[0-9a-f]{40}$")
 COVERAGE_FLOOR = 85
+NO_OPS = {"true", ":", "exit 0"}
 
 
 def _steps(path: Path) -> list[dict]:
@@ -32,8 +37,22 @@ def _named(path: Path, name: str) -> str:
     return matches[0].get("run") or ""
 
 
-def test_there_are_workflows_to_check() -> None:
-    assert {p.name for p in WORKFLOWS} == {"ci.yml", "release.yml"}
+def _invokes(run: str, program: str) -> bool:
+    """Whether some line actually starts by running `program`.
+
+    Containment credits `echo "would run pip-audit --strict"`, which is a label,
+    not an invocation.
+    """
+    return any(
+        line.strip().split(" ")[0] == program
+        for line in run.splitlines()
+        if line.strip()
+    )
+
+
+def test_the_workflow_set_is_exactly_these_files() -> None:
+    """A `.yaml` sibling would run in CI and be checked by nothing here."""
+    assert {p.name for p in WORKFLOWS} == EXPECTED_WORKFLOWS
 
 
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
@@ -47,13 +66,20 @@ def test_every_action_is_pinned_to_a_commit(path: Path) -> None:
 
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
 def test_no_gate_discards_its_exit_code(path: Path) -> None:
-    """`|| true` and `continue-on-error` turn a gate into a log line."""
-    swallowed = [
-        (s.get("name"), line.strip())
-        for s in _steps(path)
-        for line in (s.get("run") or "").splitlines()
-        if "|| true" in line and "docker rm" not in line
-    ]
+    """A step that cannot fail is a log line. `|| true`, `|| :` and a trailing
+    `exit 0` all do that, so the rule is about the no-op, not one spelling."""
+    swallowed = []
+    for step in _steps(path):
+        if step.get("name") == "Stop it":  # cleanup, deliberately best-effort
+            continue
+        lines = [
+            ln.strip() for ln in (step.get("run") or "").splitlines() if ln.strip()
+        ]
+        for line in lines:
+            if "||" in line and line.split("||")[-1].strip().rstrip(";") in NO_OPS:
+                swallowed.append((step.get("name"), line))
+        if lines and lines[-1] in NO_OPS:
+            swallowed.append((step.get("name"), lines[-1]))
     assert not swallowed, swallowed
     assert not [s.get("name") for s in _steps(path) if s.get("continue-on-error")]
 
@@ -72,7 +98,9 @@ def test_the_coverage_floor_is_not_lowered(path: Path) -> None:
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
 def test_the_dependency_cve_gate_runs_and_is_strict(path: Path) -> None:
     """Without --strict, pip-audit exits 0 when a dependency cannot be resolved."""
-    assert "--strict" in _named(path, "Dependency CVE gate (pip-audit)")
+    run = _named(path, "Dependency CVE gate (pip-audit)")
+    assert _invokes(run, "pip-audit"), run
+    assert "--strict" in run
 
 
 def test_the_image_job_runs_the_image_it_just_built() -> None:
@@ -83,9 +111,9 @@ def test_the_image_job_runs_the_image_it_just_built() -> None:
 
 
 def test_the_image_job_proves_the_credential_is_enforced() -> None:
-    """Deleting this step is what the substring form of this test missed."""
     step = _named(CI, "The running image enforces the credential")
-    assert "/index" in step
+    assert "curl" in step and "/index" in step
+    assert _invokes(step, "test"), "the status code is captured but never compared"
     assert '"401"' in step
 
 
