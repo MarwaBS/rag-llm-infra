@@ -89,9 +89,10 @@ jobs:
       - name: Build the image
         run: docker build -t rag-llm-infra:ci .
 
-      - name: The image is not carrying the build context
+      - name: The image stays small
         run: |
-          # Before .dockerignore, `COPY . .` admitted the whole virtualenv.
+          # The build is multi-stage, so the final image never held the
+          # context. This caps what the runtime layer carries.
           size="$(docker image inspect rag-llm-infra:ci --format '{{.Size}}')"
           echo "image size: $((size / 1024 / 1024)) MiB"
           test "$size" -lt 838860800 || { echo "::error::image over 800 MiB"; exit 1; }

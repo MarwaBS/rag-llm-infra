@@ -41,45 +41,22 @@ def _builders() -> list[tuple[str, Callable[[], VectorStoreProtocol]]]:
     return items
 
 
-def test_numpy_orders_the_documents_it_returns_by_index() -> None:
-    """The promise is the order of what comes back, not which documents come
-    back. `argpartition` picks the candidates and the contract calls that
-    selection unspecified when more than k share the boundary score."""
-    store = NumpyVectorStore()
-    store.add(_tied_corpus())
-    _, idx = store.search(QUERY, k=4)
-    returned = [int(i) for i in idx[0]]
-    assert returned == sorted(returned)
-
-
 @pytest.mark.parametrize("n,k", [(8, 4), (100, 3), (1000, 256), (1000, 999), (37, 37)])
 def test_the_ordering_holds_at_every_size(n: int, k: int) -> None:
+    """The promise is the order of what comes back, not which documents come
+    back: `argpartition` picks the candidates, and the contract calls that
+    selection unspecified when more than k share the boundary score.
+
+    The wide cases carry the weight. NumPy's introsort drops to insertion sort
+    on short rows, so a small tie is ordered correctly by accident and cannot
+    tell a stable sort from an unstable one.
+    """
     store = NumpyVectorStore()
     store.add(_tied_corpus(n))
     _, idx = store.search(QUERY, k=k)
     returned = [int(i) for i in idx[0]]
     assert returned == sorted(returned)
     assert len(returned) == min(k, n)
-
-
-def test_numpy_returns_tied_documents_in_index_order() -> None:
-    """Wide enough that the sort algorithm matters. NumPy's introsort drops to
-    insertion sort on short rows, so a small tie is ordered correctly by
-    accident and cannot tell a stable sort from an unstable one."""
-    store = NumpyVectorStore()
-    store.add(_tied_corpus(1000))
-    _, idx = store.search(QUERY, k=256)
-    returned = [int(i) for i in idx[0]]
-    assert returned == sorted(returned)
-
-
-def test_the_order_comes_from_the_index_not_the_partition_leftovers() -> None:
-    corpus = _tied_corpus()
-    store = NumpyVectorStore()
-    store.add(corpus[::-1].copy())
-    _, idx = store.search(QUERY, k=4)
-    returned = [int(i) for i in idx[0]]
-    assert returned == sorted(returned)
 
 
 @pytest.mark.parametrize("name,build", _builders())

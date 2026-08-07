@@ -1,3 +1,2 @@
 # Normalised endings: an editor rewrite must not read as a whole-file diff.
 * text=auto eol=lf
-*.png binary

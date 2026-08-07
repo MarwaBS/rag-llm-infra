@@ -110,8 +110,12 @@ def _retrieval() -> dict[str, Any]:
 
 def main() -> int:
     payload = {"generation": _generation(), "retrieval": _retrieval()}
+    # newline="\n" because the artefact is compared byte for byte, and
+    # `.gitattributes` checks it out as LF even where text mode would write CRLF.
     ARTEFACT.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
     )
     print(f"wrote {ARTEFACT.name}")
     for section, body in payload.items():

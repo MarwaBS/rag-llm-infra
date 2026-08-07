@@ -62,11 +62,12 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   network clients and the protocol had no way to release them, so a caller
   holding the protocol type could not close one. `FallbackLLM` closes every
   backend in its chain, including ones already tripped by budget exhaustion.
-- **`.dockerignore`, denying by default.** `COPY . .` was admitting the whole
-  virtualenv and the git history. The rules admit `pyproject.toml`, `README.md`,
-  `LICENSE` and `src/` and nothing else; a test assembles a directory from those
-  paths alone and builds the wheel in it, so a rule set too tight fails here
-  rather than in the image.
+- **`.dockerignore`, denying by default.** `COPY . .` was uploading the whole
+  virtualenv and the git history to the daemon and into the builder stage. The
+  final image never carried them, because the build has always been multi-stage.
+  The rules admit `pyproject.toml`, `README.md`, `LICENSE` and `src/` and nothing
+  else; a test assembles a directory from those paths alone and builds the wheel
+  in it, so a rule set too tight fails here rather than in the image.
 - **CI builds the image, starts it, and exercises it.** The `Dockerfile`'s `CMD`
   and `HEALTHCHECK` were tracked text no workflow had run. The job now asserts an
   unauthenticated `/index` gets 401, that an authenticated index-then-query
@@ -76,8 +77,9 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
 ### Removed: breaking
 - **`CONFIG` and `RWLock` are no longer exported from the package root.** Every
   name in `__all__` is a compatibility promise and neither could be kept:
-  `CONFIG` was read partly at construction and partly per call, and `RWLock` is
-  an implementation detail of `EmbeddingEngine`. Both remain reachable at
+  `CONFIG` is read once, when an `EmbeddingEngine` is constructed, so mutating it
+  afterwards changes nothing and a caller cannot tell. `RWLock` is an
+  implementation detail of `EmbeddingEngine`. Both remain reachable at
   `rag_llm_infra.evidence_index`. A test pins the exported set.
 - **`QdrantVectorStore` no longer defaults its collection to `"evidence"`.** The
   name is now the first, required argument, and `get_vector_store("qdrant")`
@@ -168,8 +170,8 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   `tests`.** `list[dict[str, Any]]` accepted a misspelled key, an integer role
   and a message with no role; `ignore_missing_imports` was global, which also
   silenced a typo in a first-party import path. Both are fixed, and
-  `mypy src eval tests` runs in CI. It reported 49 errors the first time it was
-  pointed at those trees.
+  `mypy src eval tests` runs in CI, which is a wider scope than the workflows
+  previously checked.
 - `requires-python` is bounded at both ends (`>=3.12,<3.14`) and CI runs both
   legs it admits.
 - **Documentation states mechanisms and is executed where it can be.** The

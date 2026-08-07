@@ -15,7 +15,8 @@ generation path with no network and no API key.
 ## Decision
 
 Define a narrow `LLMProtocol` (`invoke` / `ainvoke`, both returning assistant
-text) and select an implementation through a `get_llm(backend)` factory:
+text, plus `close` / `aclose` to release the transport) and select an
+implementation through a `get_llm(backend)` factory:
 
 - `OpenAIBackend`: the production default; wraps `openai.OpenAI` / `AsyncOpenAI`.
 - `AnthropicBackend`: a **contract stub** that raises `NotImplementedError`. It
@@ -42,7 +43,8 @@ fails loudly instead of silently degrading.
 
 - Switching vendors or adding a fallback is a config change, not a rewrite.
 - The generation path is testable offline via `MockBackend`.
-- A new real backend implements two methods and is wired into `get_llm`.
+- A new real backend implements the four protocol methods and is wired into
+  `get_llm`.
 - The stub's loud failure is intentional: chaining an unimplemented backend is a
   bug, not a runtime fallback path.
 

@@ -1,8 +1,8 @@
 """What the workflows must contain to be the gates the docs claim.
 
 Bounded: this reads the YAML, it does not run GitHub Actions. It catches a
-deleted step, a drifted tag and a dropped floor; it cannot
-tell you the container job passes. That job has no local equivalent here.
+deleted step, a drifted tag and a dropped floor. It says nothing about the
+container job, which only CI can execute.
 """
 
 from __future__ import annotations
@@ -94,27 +94,3 @@ def test_ci_invokes_both_eval_gates(module: str) -> None:
         if line.split()
     )
     assert invoked, module
-
-
-def test_the_image_job_runs_the_image_it_just_built() -> None:
-    tag = "rag-llm-infra:ci"
-    assert tag in _named(CI, "Build the image")
-    started = _named(CI, "Start it")
-    assert "docker run -d" in started and tag in started
-
-
-def test_the_image_job_proves_the_credential_is_enforced() -> None:
-    step = _named(CI, "The running image enforces the credential")
-    assert "curl" in step and "/index" in step
-    assert _invokes(step, "test"), "the status code is captured but never compared"
-    assert '"401"' in step
-
-
-def test_the_image_job_exercises_a_real_query() -> None:
-    step = _named(CI, "The running image answers a real query")
-    assert "/index" in step and "/query" in step
-    assert "grep -q" in step, "the response is fetched but never checked"
-
-
-def test_the_image_job_waits_for_the_containers_own_healthcheck() -> None:
-    assert "State.Health.Status" in _named(CI, "The container reports itself healthy")

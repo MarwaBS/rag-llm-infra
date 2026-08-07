@@ -4,8 +4,9 @@ Public API: the LLM-provider and vector-store protocols + factories, the cached
 embedding index, and the observability helpers.
 
 `CONFIG` and `RWLock` are not exported. Everything named here is a compatibility
-promise, and neither could be kept: `CONFIG` is read partly at construction and
-partly per call, and `RWLock` is an implementation detail of `EmbeddingEngine`.
+promise, and neither could be kept: `CONFIG` is read once, when an
+`EmbeddingEngine` is constructed, so a caller who mutates it afterwards changes
+nothing and has no way to tell. `RWLock` is an implementation detail.
 Both remain reachable at `rag_llm_infra.evidence_index` for anyone who accepts
 that they can change.
 """

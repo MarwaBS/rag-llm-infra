@@ -30,6 +30,7 @@ htmlcov/
 # Secrets: .env.example is tracked, .env is never
 .env
 .env.local
+.openai_key
 .pypirc
 
 # Artifacts the vector stores write

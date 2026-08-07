@@ -25,10 +25,15 @@ def test_both_declarations_of_the_version_agree() -> None:
 
 
 def test_the_security_policy_covers_the_version_being_shipped() -> None:
-    """It names the supported series, so it goes stale on every minor bump."""
+    """It names the supported series, so it goes stale on every minor bump.
+
+    The row must say yes: `"| 0.2.x" in policy` is also satisfied by a row
+    marking that series unsupported.
+    """
     series = ".".join(_declared().split(".")[:2])
     policy = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
-    assert f"| {series}.x" in policy, f"SECURITY.md does not support {series}.x"
+    row = rf"^\|\s*{re.escape(series)}\.x\s*\|\s*yes\s*\|"
+    assert re.search(row, policy, re.M), f"SECURITY.md does not support {series}.x"
 
 
 def test_the_security_policy_still_covers_the_published_line() -> None:

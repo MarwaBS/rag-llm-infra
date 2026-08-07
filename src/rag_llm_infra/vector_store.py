@@ -52,9 +52,8 @@ __all__ = [
     "QDRANT_AVAILABLE",
 ]
 
-# Type aliases for the float32/int64 arrays we operate on. PEP 695 `type`
-# statement (py3.12) so mypy treats them as types, not module-level variables
-# (a plain assignment fails with `[valid-type]` under the CI mypy run).
+# Type aliases for the float32/int64 arrays we operate on, in the PEP 695 form
+# so they read as aliases rather than module-level assignments.
 type NDArrayF32 = npt.NDArray[np.float32]
 type NDArrayI64 = npt.NDArray[np.int64]
 
@@ -355,10 +354,14 @@ class QdrantVectorStore:
         else:
             self._client = QdrantClient(url=self._url)
         self._dim: int | None = None
-        # __version__ is a module attribute, not a class attribute.
-        import qdrant_client as _qc
+        # qdrant-client exposes no __version__ on the module, so the installed
+        # distribution's metadata is the only place the real version lives.
+        from importlib.metadata import PackageNotFoundError, version
 
-        self.backend_version = getattr(_qc, "__version__", "unknown")
+        try:
+            self.backend_version = version("qdrant-client")
+        except PackageNotFoundError:  # pragma: no cover - the import above ran
+            self.backend_version = "unknown"
 
     def _ensure_collection(self, dim: int) -> None:
         """Create or recreate the owned collection with cosine distance.

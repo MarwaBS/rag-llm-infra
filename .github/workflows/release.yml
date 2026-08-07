@@ -5,10 +5,10 @@ name: Release to PyPI
 #
 # Publishing is GATED and uses build-once / promote: the `gate` job runs lint,
 # format, mypy, pytest at the same 90% floor, both eval gates, and the mutation
-# replay, over the same coverage scope. It differs from the suite guarding `main`
-# in exactly three ways: 3.12 only, where `main` runs the 3.12 + 3.13 matrix, no
-# end-to-end example run, and no `image` job, so nothing on this path builds the
-# container or exercises its credential check, query path or HEALTHCHECK.
+# replay, over the same coverage scope. It runs 3.12 only, where `main` runs the
+# 3.12 + 3.13 matrix; it skips the end-to-end example; and it has no `image` job,
+# so nothing on this path builds the container or exercises its credential check,
+# query path or HEALTHCHECK. It adds the steps below that `main` has no use for.
 # It then builds the wheel + sdist and validates THAT artifact (installs the
 # built wheel in a clean venv, imports it, and checks the py.typed marker
 # ships). The exact bytes it built and validated are uploaded as a workflow

@@ -72,7 +72,7 @@ def test_the_package_still_imports_and_retrieves(target: str) -> None:
         [sys.executable, "-c", _BREAK.format(target=target)],
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=30,
     )
     assert done.returncode == 0, f"{target}: {done.stderr[-800:]}"
     assert done.stdout.startswith("OK "), done.stdout
@@ -84,7 +84,7 @@ def test_the_control_shows_the_breaker_really_breaks_the_import() -> None:
         "import rag_llm_infra\n", "import faiss\nimport rag_llm_infra\n"
     )
     done = subprocess.run(
-        [sys.executable, "-c", probe], capture_output=True, text=True, timeout=300
+        [sys.executable, "-c", probe], capture_output=True, text=True, timeout=30
     )
     assert done.returncode != 0
     assert "simulated" in done.stderr

@@ -39,7 +39,7 @@ def _mypy(source: str, tmp_path: Path) -> tuple[int, str]:
         cwd=ROOT,
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=30,
     )
     return done.returncode, done.stdout + done.stderr
 

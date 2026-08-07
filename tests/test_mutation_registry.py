@@ -1,5 +1,8 @@
 """The mutation registry must stay applicable to the code it targets.
 
+The `is_named_by_some_entry` checks are coverage bookkeeping: they prove an
+entry exists, not that any guard was observed red. Only the replay does that.
+
 Replaying it is a separate CI step (`python -m scripts.replay_mutations`) because
 each entry runs the suite. What is cheap enough to run here is the part that rots
 silently. An anchor that no longer matches makes an entry unappliable, and a
@@ -71,7 +74,7 @@ def _scoring_modules() -> list[str]:
     )
 
 
-def test_every_eval_gate_carries_a_defect() -> None:
+def test_every_eval_gate_is_named_by_some_entry() -> None:
     modules = _scoring_modules()
     assert modules, "no runnable eval module found"
     covered = {gate for entry in REGISTRY for gate in entry["gates"]}
@@ -79,11 +82,11 @@ def test_every_eval_gate_carries_a_defect() -> None:
     assert not missing, f"no registered defect for {missing}"
 
 
-def test_the_suite_carries_defects() -> None:
+def test_some_entry_names_the_suite() -> None:
     assert any(g.startswith("pytest") for e in REGISTRY for g in e["gates"])
 
 
-def test_every_test_file_carries_a_defect() -> None:
+def test_every_test_file_is_named_by_some_entry() -> None:
     """The other half of the eval check above. A test file with nothing
     registered against it has never been shown able to fail, and adding one is
     ordinary drift: the directory is read here rather than listed."""
@@ -99,7 +102,7 @@ def test_every_test_file_carries_a_defect() -> None:
     assert not missing, missing
 
 
-def test_the_replay_carries_defects_of_its_own() -> None:
+def test_some_entry_targets_the_replay_itself() -> None:
     """It decides whether every other gate went red, so a corruption of its
     verdict certifies the whole registry without running any of it."""
     assert any(entry["file"] == "scripts/replay_mutations.py" for entry in REGISTRY)

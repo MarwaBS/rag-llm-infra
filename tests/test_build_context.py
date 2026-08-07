@@ -77,7 +77,9 @@ def test_the_admitted_files_alone_build_the_wheel(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
-        timeout=900,
+        # Under the suite's own 60s cap, so a hung build surfaces the stderr
+        # below instead of pytest-timeout killing the test with nothing to read.
+        timeout=30,
     )
     assert done.returncode == 0, done.stderr[-2000:]
     assert list((tmp_path / "out").glob("*.whl")), done.stdout[-800:]
