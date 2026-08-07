@@ -574,7 +574,7 @@
       "why": "the dependency CVE gate discards its exit code, so an advisory becomes a log line",
       "file": ".github/workflows/ci.yml",
       "find": "        run: pip-audit --strict --progress-spinner off",
-      "replace": "        run: pip-audit --strict --progress-spinner off || :",
+      "replace": "        run: pip-audit --strict --progress-spinner off || true",
       "gates": ["pytest tests/test_workflows.py"]
     },
     {

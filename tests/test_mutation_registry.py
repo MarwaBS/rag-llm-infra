@@ -8,9 +8,12 @@ registry of unappliable entries replays green while testing nothing.
 
 import ast
 import json
+import tomllib
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 REGISTRY = json.loads((REPO / "tests" / "mutations.json").read_text(encoding="utf-8"))[
@@ -106,15 +109,27 @@ def test_the_anchor_matches_exactly_once_and_the_mutation_changes_something(
     assert entry["why"].strip()
 
 
+PARSERS: dict[str, Callable[[str], object]] = {
+    ".py": ast.parse,
+    ".json": json.loads,
+    ".toml": tomllib.loads,
+    ".yml": yaml.safe_load,
+    ".yaml": yaml.safe_load,
+}
+# Line-oriented formats with no parser to disagree with. Listed rather than
+# defaulted, so a new target type fails below instead of skipping silently.
+UNPARSED = {".md", ".example", ""}
+
+
 @pytest.mark.parametrize("entry", REGISTRY, ids=lambda e: e["id"])
 def test_the_mutated_file_still_parses(entry: dict) -> None:
     """The replay decides on exit code, so a mutation that does not parse looks
-    caught while testing nothing. Every entry must produce runnable code."""
+    caught while testing nothing."""
     path = REPO / entry["file"]
     mutated = path.read_text(encoding="utf-8").replace(
         entry["find"], entry["replace"], 1
     )
-    if path.suffix == ".py":
-        ast.parse(mutated)
-    elif path.suffix == ".json":
-        json.loads(mutated)
+    parse = PARSERS.get(path.suffix)
+    assert parse or path.suffix in UNPARSED, f"no parser declared for {path.suffix!r}"
+    if parse:
+        parse(mutated)

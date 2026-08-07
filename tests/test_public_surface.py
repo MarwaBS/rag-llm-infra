@@ -29,6 +29,32 @@ EXPORTED = {
 LIFECYCLE = ("close", "aclose")
 
 
+class Recording:
+    """A backend that records which lifecycle method reached it.
+
+    A single `closed` flag cannot tell `aclose` from `aclose` delegating to
+    `close`, which is the shape the async bug took.
+    """
+
+    backend_name = "rec"
+    backend_version = "1"
+
+    def __init__(self) -> None:
+        self.closed_via: str | None = None
+
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
+        return "x"
+
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
+        return "x"
+
+    def close(self) -> None:
+        self.closed_via = "sync"
+
+    async def aclose(self) -> None:
+        self.closed_via = "async"
+
+
 def test_the_public_surface_is_exactly_this() -> None:
     assert set(package.__all__) == EXPORTED
 
@@ -78,32 +104,18 @@ def test_a_backend_missing_the_lifecycle_does_not_satisfy_the_protocol() -> None
 
 
 def test_closing_the_chain_closes_every_backend_including_tripped_ones() -> None:
-    class Recording:
-        backend_name = "rec"
-        backend_version = "1"
-
-        def __init__(self) -> None:
-            self.closed = False
-
-        def invoke(self, messages: list[Message], **kwargs: Any) -> str:
-            return "x"
-
-        async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
-            return "x"
-
-        def close(self) -> None:
-            self.closed = True
-
-        async def aclose(self) -> None:
-            self.closed = True
-
     backends = [Recording(), Recording()]
     chain = FallbackLLM(backends)
     chain._active = 1  # the first is tripped and must still be closed
     chain.close()
-    assert [b.closed for b in backends] == [True, True]
+    assert [b.closed_via for b in backends] == ["sync", "sync"]
 
 
 async def test_closing_the_chain_asynchronously_closes_every_backend() -> None:
-    backends = [MockBackend(), MockBackend()]
-    await FallbackLLM(backends).aclose()
+    """`AsyncOpenAI.close` is a coroutine, so a chain that reached for the sync
+    method here would close nothing and raise nothing."""
+    backends = [Recording(), Recording()]
+    chain = FallbackLLM(backends)
+    chain._active = 1
+    await chain.aclose()
+    assert [b.closed_via for b in backends] == ["async", "async"]
