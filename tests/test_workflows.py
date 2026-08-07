@@ -82,6 +82,20 @@ def test_the_dependency_cve_gate_runs_and_is_strict(path: Path) -> None:
     assert "--strict" in run
 
 
+@pytest.mark.parametrize("module", ["eval.retrieval_eval", "eval.generation_eval"])
+def test_ci_invokes_both_eval_gates(module: str) -> None:
+    """Neither eval threshold has a unit test behind it, so deleting the step
+    removes the only thing enforcing it. Matched on the invocation rather than
+    the step's name, which a rename would otherwise defeat."""
+    invoked = any(
+        line.split()[:3] == ["python", "-m", module]
+        for step in _steps(CI)
+        for line in (step.get("run") or "").splitlines()
+        if line.split()
+    )
+    assert invoked, module
+
+
 def test_the_image_job_runs_the_image_it_just_built() -> None:
     tag = "rag-llm-infra:ci"
     assert tag in _named(CI, "Build the image")

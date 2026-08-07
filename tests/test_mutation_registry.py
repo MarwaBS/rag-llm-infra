@@ -83,6 +83,22 @@ def test_the_suite_carries_defects() -> None:
     assert any(g.startswith("pytest") for e in REGISTRY for g in e["gates"])
 
 
+def test_every_test_file_carries_a_defect() -> None:
+    """The other half of the eval check above. A test file with nothing
+    registered against it has never been shown able to fail, and adding one is
+    ordinary drift: the directory is read here rather than listed."""
+    covered = {
+        gate.split()[1].split("::")[0]
+        for entry in REGISTRY
+        for gate in entry["gates"]
+        if gate.startswith("pytest ")
+    }
+    present = sorted(p.name for p in (REPO / "tests").glob("test_*.py"))
+    assert present, "no test files found"
+    missing = [name for name in present if f"tests/{name}" not in covered]
+    assert not missing, missing
+
+
 def test_the_replay_carries_defects_of_its_own() -> None:
     """It decides whether every other gate went red, so a corruption of its
     verdict certifies the whole registry without running any of it."""

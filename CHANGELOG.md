@@ -157,6 +157,9 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   and cross-process reproducibility could each be removed with every gate green.
 
 ### Changed
+- **The coverage floor is 90, up from 85.** The run reports the measured figure,
+  so none is quoted here: it moves with every commit, and a pinned number in a
+  comment or a changelog is stale by the next one.
 - **`auto` prefers FAISS for a measured reason.** `benchmarks/backend_crossover.py`
   times both backends at 384 dimensions. FAISS is ahead at every size the script
   tries, from a hundred documents to a hundred thousand. Bounded to the host the
@@ -213,8 +216,8 @@ Hardening release. Each behavioral fix carries a regression test.
   group so CI runs the real branch, and the trim/no-trim behavior is pinned by
   regression tests (oldest entries actually evicted under pressure; nothing
   evicted without it).
-- **Coverage gate in CI and the release gate** (`--cov-fail-under=90`; measured
-  94.47%), plus real-SDK tracing tests: the OpenTelemetry
+- **Coverage gate in CI and the release gate** (`--cov-fail-under=85`; measured
+  93% when introduced), plus real-SDK tracing tests: the OpenTelemetry
   configuration path, the OTLP-endpoint->console-exporter degradation, and
   valid trace/span IDs from `current_trace_context` inside a live span.
 - **`CHANGELOG.md`** (this file).
