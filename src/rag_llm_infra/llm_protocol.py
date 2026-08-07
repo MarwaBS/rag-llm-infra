@@ -157,20 +157,10 @@ class OpenAIBackend:
 
 
 class AnthropicBackend:
-    """Intentionally unimplemented. Exists to lock the protocol surface.
+    """Raises `NotImplementedError`. Exists to lock the protocol surface.
 
-    Migration path when promoting to a real backend:
-
-    1. `pip install anthropic` (add it to the project dependencies in pyproject.toml).
-    2. Replace both `invoke` / `ainvoke` bodies with calls to
-       `anthropic.Anthropic().messages.create(model=..., system=..., messages=...)`
-       and `anthropic.AsyncAnthropic()` respectively.
-    3. Anthropic expects `system` as a top-level arg, not a role in
-       `messages`. Extract the system message before the API call.
-    4. Normalize the response: `resp.content[0].text` -> `str`.
-    5. Map OpenAI-style kwargs (`temperature`, `max_tokens`) 1:1.
-    6. Update `backend_version = anthropic.__version__`.
-    7. Add a live-call test gated on `ANTHROPIC_API_KEY` being present.
+    `model` is a placeholder, not a measured choice. The migration plan is in
+    `docs/decisions/006-llm-protocol-abstraction.md`.
     """
 
     backend_name = "anthropic"

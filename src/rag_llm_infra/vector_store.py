@@ -9,10 +9,10 @@ pgvector) is then a config change, not a rewrite.
 
 Three implementations ship:
 
-  - `FAISSVectorStore`   — in-process FAISS IndexFlatIP (default when
-                           FAISS is available)
-  - `NumpyVectorStore`   — pure-numpy fallback for environments without
-                           a working FAISS install
+  - `FAISSVectorStore`   — in-process FAISS IndexFlatIP (what `auto` picks
+                           when FAISS imports)
+  - `NumpyVectorStore`   — pure-numpy, and what `auto` falls back to when
+                           FAISS is missing or will not load
   - `QdrantVectorStore`  — real, tested Qdrant backend. Defaults to
                            `QdrantClient(":memory:")` for test parity;
                            set `QDRANT_URL` to point at a managed Qdrant
@@ -22,6 +22,14 @@ Three implementations ship:
 
 The `get_vector_store()` factory selects an implementation by name.
 Default is "auto" → FAISS when available, NumPy otherwise.
+
+That preference is measured, not assumed. On the machine that ran
+`benchmarks/backend_crossover.py` (384 dims, k=5, brute-force inner product),
+NumPy is marginally faster at a hundred documents — 0.14 ms against 0.19 — and
+FAISS wins from a thousand upward, by roughly 1.8x at a hundred thousand. So
+`auto` is the right default above about a thousand documents, and below that the
+difference is a fraction of a millisecond. Both return the same rows; only the
+tie order differs, which `search` documents.
 """
 
 from __future__ import annotations
@@ -87,10 +95,10 @@ try:
     from .evidence_index import FAISS_AVAILABLE as _FAISS_AVAILABLE
 
     FAISS_AVAILABLE: bool = _FAISS_AVAILABLE
-except ImportError:  # pragma: no cover - defensive
+except ImportError:  # pragma: no cover - proven by test_broken_optional_deps
     logger.debug("faiss capability flag unreadable; assuming unavailable")
     FAISS_AVAILABLE = False
-except Exception as exc:  # pragma: no cover - defensive
+except Exception as exc:  # pragma: no cover - proven by test_broken_optional_deps
     # A ctypes load inside the package raises OSError, not ImportError.
     logger.warning("FAISS is installed but failed to load: %s", exc)
     FAISS_AVAILABLE = False
@@ -105,12 +113,12 @@ try:
     from qdrant_client import models as qdrant_models
 
     QDRANT_AVAILABLE: bool = True
-except ImportError:  # pragma: no cover - exercised in envs without qdrant-client
+except ImportError:  # pragma: no cover - proven by test_broken_optional_deps
     logger.debug("qdrant-client not installed; the qdrant backend is unavailable")
     QDRANT_AVAILABLE = False
     QdrantClient = None  # type: ignore[misc,assignment]
     qdrant_models = None  # type: ignore[assignment]
-except Exception as exc:  # pragma: no cover - defensive
+except Exception as exc:  # pragma: no cover - proven by test_broken_optional_deps
     logger.warning("qdrant-client is installed but failed to load: %s", exc)
     QDRANT_AVAILABLE = False
     QdrantClient = None  # type: ignore[misc,assignment]
@@ -235,7 +243,7 @@ class FAISSVectorStore:
         if self._index is not None and hasattr(self._index, "reset"):
             try:
                 self._index.reset()
-            except Exception as exc:  # pragma: no cover - defensive
+            except Exception as exc:
                 logger.warning("FAISS reset failed: %s", exc)
         self._index = None
 
@@ -475,7 +483,7 @@ class QdrantVectorStore:
         if self._dim is not None:
             try:
                 self._client.delete_collection(collection_name=self._collection)
-            except Exception as exc:  # pragma: no cover - defensive
+            except Exception as exc:
                 logger.warning("Qdrant reset failed: %s", exc)
         self._dim = None
 

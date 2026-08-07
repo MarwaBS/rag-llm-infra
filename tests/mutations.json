@@ -650,6 +650,22 @@
       "gates": ["pytest tests/test_type_gate.py"]
     },
     {
+      "id": "M82",
+      "why": "reset stops clearing the store when the backend refuses, leaving stale vectors behind",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "            except Exception as exc:\n                logger.warning(\"FAISS reset failed: %s\", exc)",
+      "replace": "            except Exception as exc:\n                logger.warning(\"FAISS reset failed: %s\", exc)\n                raise",
+      "gates": ["pytest tests/test_reset_failure.py"]
+    },
+    {
+      "id": "M83",
+      "why": "the qdrant reset failure stops being reported, so a store that did not clear looks clean",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "                logger.warning(\"Qdrant reset failed: %s\", exc)",
+      "replace": "                logger.debug(\"Qdrant reset failed: %s\", exc)",
+      "gates": ["pytest tests/test_reset_failure.py"]
+    },
+    {
       "id": "C1",
       "expect": "survives",
       "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",

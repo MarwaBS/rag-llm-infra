@@ -157,6 +157,16 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   and cross-process reproducibility could each be removed with every gate green.
 
 ### Changed
+- **`auto` prefers FAISS for a measured reason.** `benchmarks/backend_crossover.py`
+  times both backends: at 384 dimensions NumPy is marginally faster at a hundred
+  documents and FAISS wins from a thousand upward, by roughly 1.8× at a hundred
+  thousand. Bounded to the machine that ran it, which the script prints.
+- **The message shape is a `TypedDict`, and the type gate covers `eval` and
+  `tests`.** `list[dict[str, Any]]` accepted a misspelled key, an integer role
+  and a message with no role; `ignore_missing_imports` was global, which also
+  silenced a typo in a first-party import path. Both are fixed, and
+  `mypy src eval tests` runs in CI — it reported 49 errors the first time it was
+  pointed at those trees.
 - `requires-python` is bounded at both ends (`>=3.12,<3.14`) and CI runs both
   legs it admits.
 - **Documentation states mechanisms and is executed where it can be.** The
