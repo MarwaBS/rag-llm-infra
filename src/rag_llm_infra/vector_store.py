@@ -1,7 +1,7 @@
 """
 vector_store.py
 ---------------
-VectorStoreProtocol — a swappable embedding-index abstraction.
+VectorStoreProtocol: a swappable embedding-index abstraction.
 
 The minimal surface area callers use against an embedding index. Swapping the
 in-process FAISS index for a managed vector DB (Pinecone, Weaviate, Qdrant,
@@ -9,11 +9,11 @@ pgvector) is then a config change, not a rewrite.
 
 Three implementations ship:
 
-  - `FAISSVectorStore`   — in-process FAISS IndexFlatIP (what `auto` picks
+  - `FAISSVectorStore`   : in-process FAISS IndexFlatIP (what `auto` picks
                            when FAISS imports)
-  - `NumpyVectorStore`   — pure-numpy, and what `auto` falls back to when
+  - `NumpyVectorStore`   : pure-numpy, and what `auto` falls back to when
                            FAISS is missing or will not load
-  - `QdrantVectorStore`  — real, tested Qdrant backend. Defaults to
+  - `QdrantVectorStore`  : real, tested Qdrant backend. Defaults to
                            `QdrantClient(":memory:")` for test parity;
                            set `QDRANT_URL` to point at a managed Qdrant
                            instance in production. A managed backend behind
@@ -21,11 +21,11 @@ Three implementations ship:
                            exercised rather than asserted.
 
 The `get_vector_store()` factory selects an implementation by name.
-Default is "auto" → FAISS when available, NumPy otherwise.
+Default is "auto" -> FAISS when available, NumPy otherwise.
 
 That preference is measured, not assumed. On the machine that ran
 `benchmarks/backend_crossover.py` (384 dims, k=5, brute-force inner product),
-NumPy is marginally faster at a hundred documents — 0.14 ms against 0.19 — and
+NumPy is marginally faster at a hundred documents (0.14 ms against 0.19), and
 FAISS wins from a thousand upward, by roughly 1.8x at a hundred thousand. So
 `auto` is the right default above about a thousand documents, and below that the
 difference is a fraction of a millisecond. Both return the same rows; only the
@@ -106,7 +106,7 @@ except Exception as exc:  # pragma: no cover - proven by test_broken_optional_de
 if FAISS_AVAILABLE:
     import faiss
 
-# Qdrant is an optional dev/ops dependency — import lazily so the module
+# Qdrant is an optional dev/ops dependency. Import lazily so the module
 # loads cleanly in environments that don't install it.
 try:
     from qdrant_client import QdrantClient
@@ -131,7 +131,7 @@ class VectorStoreProtocol(Protocol):
 
     Implementations must accept already-computed `(N, D)` float32 embeddings
     and return per-query top-k similarity scores. Normalization and any
-    backend-specific indexing live behind the implementation — callers do
+    backend-specific indexing live behind the implementation. Callers do
     not normalize before calling `add` or `search`.
     """
 
@@ -146,7 +146,7 @@ class VectorStoreProtocol(Protocol):
         """Return `(distances, indices)` arrays of shape `(Nq, min(k, size))`.
 
         Ties: each backend orders equal scores its own way, and they do not
-        agree — NumPy breaks them on the lower document index, FAISS and Qdrant
+        agree. NumPy breaks them on the lower document index, FAISS and Qdrant
         do not. Swapping backends can therefore reorder equally-scoring
         documents. What every backend does guarantee is repeatability: the same
         store and query return the same rows in the same order, in this process
@@ -158,7 +158,7 @@ class VectorStoreProtocol(Protocol):
         `min(k, size)` across FAISS, NumPy and Qdrant alike. An empty
         store (`size == 0`, e.g. built from a zero-row `add`) therefore returns
         `(Nq, 0)`-shaped arrays uniformly, not a backend-specific error. Calling
-        `search` before any `add` is a different case — a programming error — and
+        `search` before any `add` is a different case, a programming error, and
         raises `RuntimeError`. `k` must be >= 1. Distances are inner-product
         similarities in `[-1, 1]`, equal to cosine because both sides are
         L2-normalized.
@@ -225,7 +225,7 @@ class FAISSVectorStore:
             return _empty_result(queries.shape[0])
         faiss.normalize_L2(queries)
         # Ask FAISS for at most `size` neighbours so the row width is
-        # min(k, size) — matching NumPy/Qdrant — instead of FAISS's -1/-inf
+        # min(k, size), matching NumPy/Qdrant, instead of FAISS's -1/-inf
         # padding when k > size.
         k_eff = min(k, self.size)
         scores, indices = self._index.search(queries, k_eff)
@@ -250,7 +250,7 @@ class FAISSVectorStore:
 
 class NumpyVectorStore:
     """Pure-numpy fallback. Stores `(N, D)` row-normalized matrix and runs
-    cosine similarity via a single matmul — every query scores every vector,
+    cosine similarity via a single matmul. Every query scores every vector,
     so cost is linear in corpus size. No corpus size at which FAISS overtakes
     it has been measured here; pick a backend by measuring your own corpus.
     """
@@ -282,7 +282,7 @@ class NumpyVectorStore:
         q_norms = np.linalg.norm(queries, axis=1, keepdims=True)
         q_norms[q_norms == 0] = 1.0
         norm_queries = queries / q_norms
-        # (N, D) @ (D, Nq) → (N, Nq), then transpose to (Nq, N)
+        # (N, D) @ (D, Nq) -> (N, Nq), then transpose to (Nq, N)
         similarities = np.dot(self._matrix, norm_queries.T).T  # (Nq, N)
         k_eff = min(k, similarities.shape[1])
         # argpartition for top-k, then sort descending within the top slice
@@ -325,7 +325,7 @@ class QdrantVectorStore:
     between the count and the query. Filter on `index >= 0`. FAISS and NumPy
     never pad.
 
-    Defaults to `QdrantClient(":memory:")`, a full in-process Qdrant — the same
+    Defaults to `QdrantClient(":memory:")`, a full in-process Qdrant, the same
     code path as a managed one, with no server to run for tests. Set `QDRANT_URL`
     to point at a managed endpoint; it is read on construction.
 
@@ -385,7 +385,7 @@ class QdrantVectorStore:
         norms[norms == 0] = 1.0
         normed = embeddings / norms
         self._ensure_collection(dim)
-        # Skip the upsert for a zero-row add — an empty points list trips some
+        # Skip the upsert for a zero-row add. An empty points list trips some
         # qdrant-client versions. `_dim` is still set, so search distinguishes
         # "empty store" (returns (Nq, 0)) from "before add" (raises).
         if normed.shape[0]:
@@ -416,7 +416,7 @@ class QdrantVectorStore:
         normed_queries = queries / q_norms
         k_eff = min(k, held)
 
-        # Batched search — a single HTTP round-trip for every query at once.
+        # Batched search: a single HTTP round-trip for every query at once.
         # Looping `query_points` once per query adds up to dozens of
         # round-trips when many queries run together; `query_batch_points`
         # sends them as one request.
@@ -494,10 +494,10 @@ def get_vector_store(
     """Return a configured `VectorStoreProtocol` instance.
 
     `backend` values:
-      - "auto"      → FAISS when available, NumPy otherwise (default)
-      - "faiss"     → FAISS, error if not installed
-      - "numpy"     → NumPy fallback (always available)
-      - "qdrant"    → real Qdrant backend via qdrant-client (embedded or
+      - "auto"      -> FAISS when available, NumPy otherwise (default)
+      - "faiss"     -> FAISS, error if not installed
+      - "numpy"     -> NumPy fallback (always available)
+      - "qdrant"    -> real Qdrant backend via qdrant-client (embedded or
                       managed, depending on QDRANT_URL env). Needs `collection`,
                       which that store replaces on every `add()` and therefore
                       owns.

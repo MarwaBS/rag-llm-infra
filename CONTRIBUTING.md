@@ -41,7 +41,7 @@ Adding an entry:
 
 1. Write the guard.
 2. Plant the defect by hand and watch the named gate go **red**. On a CRLF
-   checkout a byte-level replace can match nothing — assert the text changed
+   checkout a byte-level replace can match nothing; assert the text changed
    before believing an exit code.
 3. Add the entry with the gate that caught it.
 4. `python -m scripts.replay_mutations`.

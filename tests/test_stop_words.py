@@ -2,7 +2,7 @@
 
 `_STOP` decides which of an answer's words carry a groundable claim, so every
 score depends on its exact membership. It is a judgement call with no derivation
-behind it — closed-class English function words — so it is pinned rather than
+behind it (closed-class English function words), so it is pinned rather than
 recomputed. Most of it can leave without moving either eval gate's score.
 """
 

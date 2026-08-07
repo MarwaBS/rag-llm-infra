@@ -8,11 +8,11 @@ Exits non-zero if recall@1 or MRR fall below the configured thresholds, so a
 regression in the vector-store search path (ranking, indexing, the
 NumPy backend) fails the build.
 
-SCOPE — read this. This eval runs the deterministic bag-of-tokens demo embedder
+SCOPE, read this. This eval runs the deterministic bag-of-tokens demo embedder
 (`rag_llm_infra._demo.embed`) over the NumPy backend. Because that embedder is
 order-insensitive, the "paraphrased" queries below (which reorder the document's
 tokens) are effectively token-set overlap, NOT semantics. So this gate measures
-the *retrieval mechanics* — does the store rank the right document top-1 — not
+the *retrieval mechanics*, meaning does the store rank the right document top-1, not
 semantic retrieval quality. Semantic quality depends on the real
 `EmbeddingEngine` (sentence-transformers). That needs a model download, so it is
 out of scope for a hermetic CI gate. Evaluate it separately with a labelled set
@@ -29,8 +29,8 @@ from rag_llm_infra import get_vector_store
 from rag_llm_infra._demo import embed
 
 # Each query reorders/varies a document's tokens; the int is the index of its
-# single relevant document. (Order-insensitive demo embedder → this is token-set
-# overlap, not semantics — see the module docstring.)
+# single relevant document. (Order-insensitive demo embedder -> this is token-set
+# overlap, not semantics; see the module docstring.)
 DOCS: list[str] = [
     "FAISS performs in-process vector similarity search with brute-force inner product.",
     "Qdrant is a vector database exposing REST and gRPC search APIs.",
@@ -75,7 +75,7 @@ def evaluate(k: int = 3) -> dict[str, float]:
 def main() -> int:
     m = evaluate()
     print(
-        f"retrieval eval — recall@1={m['recall@1']:.3f}  MRR={m['mrr']:.3f}  (n={len(QUERIES)})"
+        f"retrieval eval: recall@1={m['recall@1']:.3f}  MRR={m['mrr']:.3f}  (n={len(QUERIES)})"
     )
     failures = {k: round(m[k], 3) for k, t in THRESHOLDS.items() if m[k] < t}
     if failures:

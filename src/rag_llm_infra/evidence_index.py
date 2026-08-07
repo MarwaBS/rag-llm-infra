@@ -1,5 +1,5 @@
 """
-Embedding index — configuration, feature flags, concurrency utilities, and embedding engine.
+Embedding index: configuration, feature flags, concurrency utilities, and embedding engine.
 
 Contains the CONFIG dict, optional library feature flags (FAISS, SentenceTransformers, psutil),
 an RWLock for concurrent read/write access, and EmbeddingEngine for sentence-level
@@ -81,8 +81,8 @@ class RWLock:
 
     Writer preference: once a writer is waiting, new readers queue behind it, so
     a steady stream of readers cannot hold `_readers > 0` forever and starve it.
-    Used by EmbeddingEngine — short read-locked cache lookups, exclusive
-    write-locked inserts/trims — with the slow `model.encode` outside the lock.
+    Used by EmbeddingEngine for short read-locked cache lookups and exclusive
+    write-locked inserts/trims, with the slow `model.encode` outside the lock.
     """
 
     def __init__(self) -> None:
@@ -208,7 +208,7 @@ class EmbeddingEngine:
         # NFKC unicode canonicalization ONLY. Do NOT lowercase or collapse
         # whitespace: the embedding model is case- and spacing-sensitive ("US"
         # and "us", "a b" and "a  b" embed differently), so the key must keep
-        # them distinct — otherwise a lookup returns the wrong cached vector.
+        # them distinct. Otherwise a lookup returns the wrong cached vector.
         normalized = unicodedata.normalize("NFKC", text)
         raw_key = f"{namespace}:{normalized}"
         return hashlib.md5(raw_key.encode(), usedforsecurity=False).hexdigest()
@@ -249,7 +249,7 @@ class EmbeddingEngine:
         keys = [self._normalize_cache_key(t, namespace) for t in texts]
         results: list[Any] = [None] * len(texts)
 
-        # Read phase — concurrent readers share the cache.
+        # Read phase: concurrent readers share the cache.
         with self._lock.read_lock:
             for i, key in enumerate(keys):
                 cached = self._cache.get(key)
@@ -261,7 +261,7 @@ class EmbeddingEngine:
             self._total_requests += len(texts)
             self._cache_hits += hits
 
-        # Compute misses OUTSIDE any lock — model.encode is the slow part and
+        # Compute misses OUTSIDE any lock. model.encode is the slow part and
         # must not block concurrent cache hits.
         miss_indices = [i for i, r in enumerate(results) if r is None]
         if miss_indices:
@@ -270,7 +270,7 @@ class EmbeddingEngine:
             # (same key == same cached vector, so one encode covers both).
             # "Same key" is NFKC-equality (see `_normalize_cache_key`): two raw
             # strings that NFKC-normalize identically share one encode and one
-            # vector — consistent with the cache contract, and how a real tokenizer
+            # vector, consistent with the cache contract, and how a real tokenizer
             # would treat them anyway.
             unique_keys: list[str] = []
             first_index_for_key: dict[str, int] = {}

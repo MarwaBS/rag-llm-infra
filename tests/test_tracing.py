@@ -1,4 +1,4 @@
-"""Tests for tracing.py — OpenTelemetry distributed tracing.
+"""Tests for tracing.py: OpenTelemetry distributed tracing.
 
 The OTel API + SDK ship in the dev group, so the REAL configuration path
 (provider setup, exporter selection, trace-context extraction) is exercised in
@@ -113,7 +113,7 @@ class TestConfigureTracingWithSdk:
 
 @pytest.mark.skipif(not OTEL_SDK_AVAILABLE, reason="opentelemetry-sdk not installed")
 class TestCurrentTraceContextWithSdk:
-    """current_trace_context against REAL spans — the contract log_config relies
+    """current_trace_context against REAL spans, the contract log_config relies
     on to inject trace IDs into every log record."""
 
     def test_active_span_yields_valid_hex_ids(self):

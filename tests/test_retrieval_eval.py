@@ -1,4 +1,4 @@
-"""The retrieval eval must meet its thresholds — this is the CI quality gate."""
+"""The retrieval eval must meet its thresholds; this is the CI quality gate."""
 
 from eval.retrieval_eval import THRESHOLDS, evaluate
 

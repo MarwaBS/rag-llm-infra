@@ -91,7 +91,7 @@ def _resolve(statement: str) -> None:
 
 def test_the_package_quotes_at_least_one_import() -> None:
     # Without this the parametrized test below would pass on an empty set.
-    assert _quoted_imports(), "no import statements collected — the collector is dead"
+    assert _quoted_imports(), "no import statements collected; the collector is dead"
 
 
 @pytest.mark.parametrize("filename,statement", _quoted_imports())

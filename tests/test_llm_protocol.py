@@ -5,7 +5,7 @@ Each backend is verified against the Protocol via isinstance(LLMProtocol),
 plus per-backend behaviors (mock determinism, anthropic stub error message,
 factory routing).
 
-No live API calls — OpenAIBackend's network path is NOT exercised here.
+No live API calls. OpenAIBackend's network path is NOT exercised here.
 These tests are hermetic.
 """
 
@@ -65,7 +65,7 @@ class TestMockBackend:
         assert llm.backend_version  # non-empty
 
     def test_kwargs_ignored_silently(self) -> None:
-        """Mock ignores temperature/max_tokens/etc — caller doesn't need to
+        """Mock ignores temperature/max_tokens/etc; caller doesn't need to
         strip them when swapping in MockBackend for tests."""
         llm = MockBackend(response="ok")
         assert llm.invoke([], temperature=0.7, max_tokens=100) == "ok"
@@ -91,7 +91,7 @@ class TestAnthropicBackend:
             llm.invoke([])
 
     def test_conforms_to_protocol_even_as_stub(self) -> None:
-        """runtime_checkable Protocol verifies shape only — the stub has the
+        """runtime_checkable Protocol verifies shape only; the stub has the
         right methods, so isinstance passes. NotImplementedError fires at
         call time, which is the point of the stub."""
         assert isinstance(AnthropicBackend(), LLMProtocol)
@@ -129,7 +129,7 @@ class TestOpenAIBackend:
             assert isinstance(llm, LLMProtocol)
 
     def test_missing_sdk_raises_runtime_error(self) -> None:
-        """Simulate `openai` not installed — constructor must raise with
+        """Simulate `openai` not installed; constructor must raise with
         install guidance, not a cryptic ImportError from deep in the call."""
         with patch.dict("sys.modules", {"openai": None}):
             with pytest.raises(RuntimeError, match="openai"):
@@ -226,7 +226,7 @@ class TestFactory:
             get_llm(backend="grok")
 
     def test_unknown_backend_error_lists_valid_options(self) -> None:
-        """The error must help the caller fix it — list the valid names."""
+        """The error must help the caller fix it: list the valid names."""
         with pytest.raises(ValueError) as exc:
             get_llm(backend="palm")
         assert "openai" in str(exc.value)
@@ -274,7 +274,7 @@ class TestOpenAIBackendClientLifecycle:
     def test_close_closes_the_sync_client_and_leaves_the_async_one_alone(self) -> None:
         """The real `AsyncOpenAI.close` is a coroutine function, so calling it
         from a sync method builds a coroutine nobody awaits and closes nothing.
-        Asserting it was never even called is what makes that shape red — an
+        Asserting it was never even called is what makes that shape red. An
         assertion about awaiting passes under it, since it never awaits."""
         fake_openai = MagicMock()
         fake_openai.__version__ = "1.109.1"

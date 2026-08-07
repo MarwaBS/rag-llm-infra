@@ -21,7 +21,7 @@ from rag_llm_infra.vector_store import (
 
 
 def _orthonormal_corpus() -> np.ndarray:
-    # Three orthonormal vectors → the nearest-neighbour answer is unambiguous.
+    # Three orthonormal vectors -> the nearest-neighbour answer is unambiguous.
     return np.eye(3, dtype="float32")
 
 
@@ -83,7 +83,7 @@ class TestQdrantBackend:
 
 
 def _available_backends() -> list[tuple[str, Callable[[], VectorStoreProtocol]]]:
-    """(name, builder) — Qdrant needs the collection name it owns."""
+    """(name, builder): Qdrant needs the collection name it owns."""
     items: list[tuple[str, Callable[[], VectorStoreProtocol]]] = [
         ("numpy", NumpyVectorStore)
     ]
@@ -100,7 +100,7 @@ class TestContractAcrossBackends:
     contract), so a swap is truly transparent."""
 
     def test_k_greater_than_size_truncates_to_size(self, name, build) -> None:
-        # Row width is min(k, size) on every backend — no FAISS -1/-inf padding.
+        # Row width is min(k, size) on every backend; no FAISS -1/-inf padding.
         store = build()
         store.add(_orthonormal_corpus())  # size == 3
         scores, idx = store.search(np.array([[1, 0, 0]], dtype="float32"), k=10)

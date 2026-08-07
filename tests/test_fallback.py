@@ -1,4 +1,4 @@
-"""Tests for FallbackLLM — transient fallthrough vs permanent budget trip."""
+"""Tests for FallbackLLM: transient fallthrough vs permanent budget trip."""
 
 import pytest
 

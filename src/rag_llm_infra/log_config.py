@@ -95,7 +95,7 @@ class _JsonFormatter(logging.Formatter):
 
 
 def configure_logging(level: str = "INFO") -> None:
-    """Configure root logger.  Safe to call multiple times — only runs once."""
+    """Configure root logger.  Safe to call multiple times; only runs once."""
     global _CONFIGURED
     if _CONFIGURED:
         return
@@ -110,7 +110,7 @@ def configure_logging(level: str = "INFO") -> None:
     else:
         handler.setFormatter(
             logging.Formatter(
-                "%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+                "%(asctime)s %(levelname)-8s %(name)s | %(message)s",
                 datefmt="%H:%M:%S",
             )
         )
@@ -127,7 +127,7 @@ def llm_call(
 ) -> Generator[dict[str, Any], None, None]:
     """Time a single LLM call and log the result as one JSON line.
 
-    Measures `latency_ms` only. `tokens` is seeded to 0 for the caller to fill —
+    Measures `latency_ms` only. `tokens` is seeded to 0 for the caller to fill;
     this module never reads a provider response.
 
     Example::

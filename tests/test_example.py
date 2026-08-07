@@ -1,4 +1,4 @@
-"""End-to-end RAG pipeline test — deterministic, no network, no API key."""
+"""End-to-end RAG pipeline test: deterministic, no network, no API key."""
 
 from example import DOCS, embed, rag_answer, retrieve
 

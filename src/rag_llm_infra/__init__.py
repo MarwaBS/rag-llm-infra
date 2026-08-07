@@ -1,4 +1,4 @@
-"""rag-llm-infra — vendor-neutral RAG + LLM serving infrastructure.
+"""rag-llm-infra: vendor-neutral RAG + LLM serving infrastructure.
 
 Public API: the LLM-provider and vector-store protocols + factories, the cached
 embedding index, and the observability helpers.

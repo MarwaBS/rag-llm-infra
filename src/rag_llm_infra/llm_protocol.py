@@ -1,15 +1,15 @@
 """
-LLMProtocol — vendor-neutral chat-completion abstraction.
+LLMProtocol: vendor-neutral chat-completion abstraction.
 
 Mirrors `vector_store.py:VectorStoreProtocol` for LLM calls. See
 `docs/decisions/006-llm-protocol-abstraction.md` for the full rationale.
 
 Runtime backends:
-    - OpenAIBackend  — production default
-    - AnthropicBackend — contract stub, raises NotImplementedError with
+    - OpenAIBackend  : production default
+    - AnthropicBackend : contract stub, raises NotImplementedError with
       migration TODO. Locks the interface so a later implementer does not
       have to redesign call sites.
-    - MockBackend    — deterministic, no network, no cost; for tests.
+    - MockBackend    : deterministic, no network, no cost; for tests.
 
 Selection is via `get_llm(backend)` reading an `auto | openai | anthropic
 | mock` value.
@@ -34,7 +34,7 @@ Role = Literal["system", "user", "assistant"]
 class Message(TypedDict):
     """One chat turn.
 
-    Three roles, because this protocol excludes tool-calling and vision — the
+    Three roles, because this protocol excludes tool-calling and vision. The
     roles those add would be surface it does not carry. `list[dict[str, Any]]`
     accepted a misspelled key, an integer role and a message with no role at
     all; mypy reported none of them.
@@ -50,12 +50,12 @@ class LLMProtocol(Protocol):
 
     Implementations wrap a specific LLM vendor behind a uniform surface so
     callers can switch backends via config. This protocol deliberately does
-    NOT include streaming, tool-calling, or vision inputs — those are
+    NOT include streaming, tool-calling, or vision inputs. Those are
     vendor-specific today and would leak the abstraction. Narrow beats
     feature-complete; add surface when a second real backend proves the
     need.
 
-    Cost tracking is deliberately NOT handled here — it belongs at the
+    Cost tracking is deliberately NOT handled here. It belongs at the
     service-layer boundary, so every backend benefits from one cost
     ceiling without reimplementing it per vendor.
     """
@@ -234,14 +234,14 @@ def get_llm(backend: str = "auto", **kwargs: Any) -> LLMProtocol:
     """Select an `LLMProtocol` implementation by name.
 
     `backend`:
-        - `auto`      — an alias for `openai`, not a capability probe. Raises
+        - `auto`      : an alias for `openai`, not a capability probe. Raises
                         when `openai` is absent rather than degrading to
                         `mock`: a fake answer is worse than no answer. Unlike
                         `get_vector_store("auto")`, where every backend
                         returns real neighbours and falling back is safe.
-        - `openai`    — explicit OpenAI.
-        - `anthropic` — stub; raises at call time (see AnthropicBackend).
-        - `mock`      — deterministic, for tests.
+        - `openai`    : explicit OpenAI.
+        - `anthropic` : stub; raises at call time (see AnthropicBackend).
+        - `mock`      : deterministic, for tests.
 
     Extra kwargs are forwarded to the backend constructor.
     """

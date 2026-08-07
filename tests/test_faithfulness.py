@@ -15,7 +15,7 @@ import pytest
 
 from rag_llm_infra import groundedness
 
-# (answer, contexts, expected) — expected = |content(answer) & support| / |content(answer)|
+# (answer, contexts, expected): expected = |content(answer) & support| / |content(answer)|
 CASES: list[tuple[str, list[str], Fraction]] = [
     # whole tokens, not prefixes
     ("process product", ["the processor handles products"], Fraction(0)),

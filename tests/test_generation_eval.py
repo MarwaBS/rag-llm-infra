@@ -58,7 +58,7 @@ def test_gate_passes_end_to_end() -> None:
 
 
 def test_gate_fails_a_metric_that_flags_nothing(monkeypatch) -> None:
-    """Lifting every score by 0.33 leaves an unsupported answer scoring 0.33 —
+    """Lifting every score by 0.33 leaves an unsupported answer scoring 0.33,
     a metric that flags nothing. The gate must not pass it."""
     real = g.groundedness
     monkeypatch.setattr(g, "groundedness", lambda a, c: min(1.0, real(a, c) + 0.33))

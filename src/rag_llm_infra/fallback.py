@@ -4,7 +4,7 @@
 next one when the current backend raises a *retryable* error. It does NOT track
 spend itself. Budget accounting lives at the service layer (see ADR-006). This
 class only *reacts* to a `BudgetExhausted` a backend raises, and trips the chain
-forward **permanently** — that provider is skipped for the rest of this object's
+forward **permanently**. That provider is skipped for the rest of this object's
 life. Other retryable exceptions are transient: the next backend is tried for
 that call only.
 
@@ -16,12 +16,12 @@ cannot leave the chain stuck on a silent backend.
 Bounded: on the sync path this stops waiting, it does not cancel. The provider
 keeps working on a daemon thread and its answer is discarded. Python cannot
 interrupt a blocking socket read in another thread. What is not discarded is a
-`BudgetExhausted` it raises afterwards — that still trips the chain past it.
+`BudgetExhausted` it raises afterwards; that still trips the chain past it.
 The async path uses `asyncio.wait_for`, which does cancel. Without `timeout_s`
 the behaviour is unchanged and a hanging provider blocks.
 
 Programming/contract errors (e.g. `TypeError`, `NotImplementedError`) are NOT
-retryable — they propagate, so a misconfigured chain fails loudly instead of
+retryable. They propagate, so a misconfigured chain fails loudly instead of
 silently degrading. That is also why you should not chain the `AnthropicBackend`
 stub: it raises `NotImplementedError`, which is a bug to surface, not a fallback.
 
@@ -171,7 +171,7 @@ class FallbackLLM:
                 # advance monotonic so a slower concurrent call can't regress it.
                 self._trip_past(i)
             except _NON_RETRYABLE:
-                raise  # a bug, not a provider failure — surface it, don't fall through
+                raise  # a bug, not a provider failure; surface it, don't fall through
             except self._retry_on as exc:
                 last = exc  # transient: try the next backend for this call only
         raise RuntimeError(

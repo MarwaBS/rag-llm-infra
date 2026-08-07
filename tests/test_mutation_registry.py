@@ -58,7 +58,7 @@ def _scoring_modules() -> list[str]:
     The gates that score this repo are `pytest` and the eval modules. Reading the
     package is structural, so a new eval module is in scope the moment it exists,
     whichever workflow ends up calling it. Bounded: a scoring gate that is not an
-    eval module — some future `scripts/score_*.py` — is outside this check.
+    eval module, some future `scripts/score_*.py`, is outside this check.
     """
     return sorted(
         path.stem
@@ -87,7 +87,7 @@ def test_the_replay_carries_defects_of_its_own() -> None:
 
 
 def test_the_only_control_is_this_one() -> None:
-    """A control is declared, not detected — survival is what a control and an
+    """A control is declared, not detected. Survival is what a control and an
     unheld guard have in common. Pinning it whole is what stops a real guard
     being parked in the registry and reported as intended behaviour."""
     controls = [entry for entry in REGISTRY if entry.get("expect") == "survives"]

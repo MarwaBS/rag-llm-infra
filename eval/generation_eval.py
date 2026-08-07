@@ -72,7 +72,7 @@ def evaluate() -> dict[str, float]:
 def main() -> int:
     m = evaluate()
     print(
-        f"generation eval — grounded={m['grounded']:.3f}  "
+        f"generation eval: grounded={m['grounded']:.3f}  "
         f"hallucinated={m['hallucinated']:.3f}  margin={m['margin']:.3f}"
     )
     reasons: list[str] = []

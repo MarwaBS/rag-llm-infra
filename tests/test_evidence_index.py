@@ -1,4 +1,4 @@
-"""Tests for evidence_index.py — RWLock, EmbeddingEngine, config.
+"""Tests for evidence_index.py: RWLock, EmbeddingEngine, config.
 
 EmbeddingEngine is exercised for real by injecting a deterministic fake embedder
 (``model=...``), so the cache, cache-key correctness, eviction, stats, and the

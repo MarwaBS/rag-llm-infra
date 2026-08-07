@@ -8,7 +8,7 @@ sizes so the choice is a number rather than an assumption.
 
 Bounded: one machine, one build of faiss-cpu, brute-force inner product over
 random vectors. It says where the crossover is here, not on your production
-hardware, and it says nothing about recall — both backends return the same
+hardware, and it says nothing about recall. Both backends return the same
 answers, which `tests/test_vector_store.py` pins.
 """
 

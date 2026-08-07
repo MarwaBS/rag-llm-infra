@@ -1,4 +1,4 @@
-"""Tests for log_config.py — structured logging and llm_call context manager."""
+"""Tests for log_config.py: structured logging and llm_call context manager."""
 
 import contextlib
 import json
@@ -212,7 +212,7 @@ def test_underscore_prefixed_fields_stay_out_of_the_log_line() -> None:
 
 
 def test_the_records_own_machinery_stays_out_of_the_log_line() -> None:
-    """`message` and `asctime` are not attributes of a fresh record — a standard
+    """`message` and `asctime` are not attributes of a fresh record. A standard
     formatter stamps them on. A record that reached a second handler first
     carries them, and forwarding them would duplicate the message and the
     timestamp under a second name."""

@@ -19,7 +19,7 @@ pip install "rag-llm-infra[psutil]"                         # + memory-pressure-
 pip install -e ".[dev]"                                     # from a local clone, for development
 ```
 
-## Quickstart — end-to-end RAG (no API key, no network)
+## Quickstart: end-to-end RAG (no API key, no network)
 
 ```bash
 git clone https://github.com/MarwaBS/rag-llm-infra && cd rag-llm-infra
@@ -28,8 +28,8 @@ python example.py
 ```
 
 ```
-embed documents → index in a VectorStore → retrieve top-k for a query
-                → build a grounded prompt → answer with an LLMProtocol backend
+embed documents -> index in a VectorStore -> retrieve top-k for a query
+                -> build a grounded prompt -> answer with an LLMProtocol backend
 ```
 
 Runs on the NumPy vector store + the deterministic mock LLM, so it needs no key.
@@ -46,12 +46,12 @@ uvicorn rag_llm_infra.serve:app
 ```
 
 > `/index` and `/query` require `X-API-Key`, and answer 503 while `RAG_API_KEY`
-> is unset — there is no open mode. `/health` stays open for container probes.
-> Bodies over 1 MiB and corpora over 20000 documents are refused by default —
+> is unset. There is no open mode. `/health` stays open for container probes.
+> Bodies over 1 MiB and corpora over 20000 documents are refused by default;
 > each document costs a fixed-width vector however short it is, so bytes on the
 > wire do not bound memory. `uvicorn` binds `127.0.0.1` unless `--host` or
 > `UVICORN_HOST` says otherwise; the container passes `--host 0.0.0.0` and
-> publishes 8000. One shared key, no rate limiting — see [SECURITY.md](SECURITY.md).
+> publishes 8000. One shared key, no rate limiting; see [SECURITY.md](SECURITY.md).
 
 ```bash
 curl -XPOST localhost:8000/index -d '{"documents":["FAISS is in-process vector search","Qdrant is a vector database"]}' -H 'content-type: application/json' -H "X-API-Key: $RAG_API_KEY"
@@ -62,19 +62,19 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 
 | Module | Responsibility |
 | --- | --- |
-| `rag_llm_infra.llm_protocol` | `LLMProtocol` — `runtime_checkable` Protocol over OpenAI / Anthropic-stub / Mock; factory `get_llm()` |
-| `rag_llm_infra.vector_store` | `VectorStoreProtocol` — in-process FAISS `IndexFlatIP`, pure-NumPy fallback, real **Qdrant** (batched search). Qdrant needs `collection=`: `add()` replaces that collection, so the store owns it |
-| `rag_llm_infra.evidence_index` | `EmbeddingEngine` — SentenceTransformers embeddings + a cache (insertion-order eviction) guarded by a writer-preferring reader/writer lock, so the slow `model.encode` runs outside the lock. Memory-pressure-aware trimming activates with the `[psutil]` extra (`pip install "rag-llm-infra[psutil]"`); without it the cache is fixed-size |
+| `rag_llm_infra.llm_protocol` | `LLMProtocol`: `runtime_checkable` Protocol over OpenAI / Anthropic-stub / Mock; factory `get_llm()` |
+| `rag_llm_infra.vector_store` | `VectorStoreProtocol`: in-process FAISS `IndexFlatIP`, pure-NumPy fallback, real **Qdrant** (batched search). Qdrant needs `collection=`: `add()` replaces that collection, so the store owns it |
+| `rag_llm_infra.evidence_index` | `EmbeddingEngine`: SentenceTransformers embeddings + a cache (insertion-order eviction) guarded by a writer-preferring reader/writer lock, so the slow `model.encode` runs outside the lock. Memory-pressure-aware trimming activates with the `[psutil]` extra (`pip install "rag-llm-infra[psutil]"`); without it the cache is fixed-size |
 | `rag_llm_infra.tracing` | OpenTelemetry spans with console-exporter + no-op fallbacks |
 | `rag_llm_infra.log_config` | structured JSON logging + an `llm_call` timer. It measures latency; `tokens` is a field the caller fills |
-| `rag_llm_infra.serve` | FastAPI service over the vector store + LLM protocol. `/index` and `/query` need `X-API-Key`; `/health`, `/docs`, `/redoc` and `/openapi.json` are open — see [SECURITY.md](SECURITY.md). Does not install `log_config` or `tracing`; call those yourself at startup |
-| `rag_llm_infra.faithfulness` | `groundedness(answer, contexts)` — lexical faithfulness metric for RAG output |
-| `rag_llm_infra.fallback` | `FallbackLLM` — budget-aware multi-provider routing; drop-in `LLMProtocol` |
+| `rag_llm_infra.serve` | FastAPI service over the vector store + LLM protocol. `/index` and `/query` need `X-API-Key`; `/health`, `/docs`, `/redoc` and `/openapi.json` are open; see [SECURITY.md](SECURITY.md). Does not install `log_config` or `tracing`; call those yourself at startup |
+| `rag_llm_infra.faithfulness` | `groundedness(answer, contexts)`: lexical faithfulness metric for RAG output |
+| `rag_llm_infra.fallback` | `FallbackLLM`: budget-aware multi-provider routing; drop-in `LLMProtocol` |
 
 ## Quality gates
 
 ```bash
-python -m eval.retrieval_eval      # recall@1 / MRR — retrieval mechanics over the demo embedder
+python -m eval.retrieval_eval      # recall@1 / MRR: retrieval mechanics over the demo embedder
 python -m eval.generation_eval     # groundedness (faithfulness) of generated answers
 ```
 
@@ -95,11 +95,11 @@ catches the out-of-vocabulary hallucination signature cheaply on every
 generation. Pair it with an LLM-judge for semantic faithfulness. The limits are
 in the `faithfulness` module docstring and pinned by tests.
 
-## Engineering principles demonstrated
+## Engineering principles shown
 
-- **Swap by interface** — `LLMProtocol` / `VectorStoreProtocol` make the model and the index runtime-swappable.
-- **Degrade, don't crash — where a degraded answer is still an answer.** FAISS / Qdrant / OpenTelemetry / SentenceTransformers are optional. Each is probed at import behind a handler that treats a missing library and one that fails to load alike, so neither stops `import rag_llm_infra`; a test simulates both. The LLM factory is the deliberate exception: `get_llm("auto")` raises rather than falling back to the mock backend, because a fabricated answer is worse than none.
-- **Measured, not asserted** — a retrieval eval gate, not just unit tests; packaged and CI-built end to end.
+- **Swap by interface.** `LLMProtocol` / `VectorStoreProtocol` make the model and the index runtime-swappable.
+- **Degrade, don't crash, where a degraded answer is still an answer.** FAISS / Qdrant / OpenTelemetry / SentenceTransformers are optional. Each is probed at import behind a handler that treats a missing library and one that fails to load alike, so neither stops `import rag_llm_infra`; a test simulates both. The LLM factory is the deliberate exception: `get_llm("auto")` raises rather than falling back to the mock backend, because a fabricated answer is worse than none.
+- **Measured, not asserted.** A retrieval eval gate, not just unit tests; packaged and CI-built end to end.
 
 ## Develop / test
 
@@ -113,4 +113,4 @@ skip only when those libraries are absent).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

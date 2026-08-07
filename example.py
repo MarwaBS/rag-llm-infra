@@ -1,8 +1,8 @@
 """
 End-to-end retrieval-augmented generation, wired from this package's parts.
 
-    embed documents → index in a VectorStore → retrieve top-k for a query
-                     → build a grounded prompt → answer with an LLMProtocol backend
+    embed documents -> index in a VectorStore -> retrieve top-k for a query
+                     -> build a grounded prompt -> answer with an LLMProtocol backend
 
 Runs on the NumPy vector store and the deterministic mock LLM, so it needs no
 API key, no network, and no native libraries. The wheel contains the package

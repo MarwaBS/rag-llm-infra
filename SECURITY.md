@@ -6,8 +6,8 @@ Only the latest published minor release on PyPI receives fixes.
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.x   | ✅        |
-| < 0.2   | ❌        |
+| 0.2.x   | yes       |
+| < 0.2   | no        |
 
 ## Reporting a vulnerability
 
@@ -33,7 +33,7 @@ Installed with the `serve` extra and used as the `Dockerfile`'s entrypoint, it
 serves `/index` and `/query` behind a credential and `/health`, `/docs`, `/redoc`
 and `/openapi.json` without one. The two POST routes require `X-API-Key` to equal
 `RAG_API_KEY`, compared as bytes with `secrets.compare_digest`, and answer 503
-when that variable is unset — there is no configuration in which they serve
+when that variable is unset. There is no configuration in which they serve
 openly. A test pins that open list exactly and requires every other route to hold
 the credential dependency by identity. `/health` returns only `{"status": "ok"}`;
 the other three describe the API's shape, not its data.
@@ -53,5 +53,5 @@ multi-tenant service.
 caller attaches via `extra={...}` into the log line verbatim. It drops names
 beginning with `_` and every field a bare `LogRecord` already carries; whatever
 the caller added is emitted. The library reads no credentials of its own and logs
-none, but it will faithfully log a secret you hand it — keep credentials out of
+none, but it will faithfully log a secret you hand it; keep credentials out of
 `extra`.

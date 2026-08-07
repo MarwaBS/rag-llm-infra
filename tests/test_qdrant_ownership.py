@@ -60,7 +60,7 @@ def test_size_asks_the_collection_every_time(
     one_endpoint: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Hold the call, not its result. Comparing readings only catches a memo
-    that latched a non-zero first value — a sticky zero passes that and makes
+    that latched a non-zero first value. A sticky zero passes that and makes
     `search` return nothing forever."""
     store = vs.QdrantVectorStore(collection="owned")
     store.add(np.eye(3, dtype="float32"))

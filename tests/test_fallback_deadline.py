@@ -183,7 +183,7 @@ async def test_a_backend_raised_timeout_is_routed_the_same_way_on_both_paths(
 ) -> None:
     """A `TimeoutError` the backend raises is the backend's, not the deadline's,
     so it goes through `retry_on`. Both paths must agree, and the case that
-    matters is with a deadline set — without one the async branch never runs."""
+    matters is with a deadline set. Without one the async branch never runs."""
     chain = FallbackLLM(
         [_Timeouts(), _Backend("fast")],
         retry_on=(ConnectionError,),

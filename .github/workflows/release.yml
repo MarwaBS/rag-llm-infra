@@ -11,7 +11,7 @@ name: Release to PyPI
 # validates THAT artifact (installs the built wheel in a clean venv, imports it,
 # and checks the py.typed marker ships). The exact bytes
 # it built and validated are uploaded as a workflow artifact; the `publish` job
-# downloads and uploads those same bytes — it never rebuilds. So the wheel that
+# downloads and uploads those same bytes; it never rebuilds. So the wheel that
 # reaches PyPI is bit-identical to the one the gate validated, not a fresh build
 # that nothing tested. The tag must match the package version, and the upload is
 # idempotent (`--skip-existing`) so a re-pushed tag does not hard-fail.

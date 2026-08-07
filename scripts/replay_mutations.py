@@ -6,7 +6,7 @@ One at a time: apply the mutation, run its gates, restore the file's original
 bytes. A mutation that leaves every gate green is a guard nobody is holding, so
 this exits non-zero and names it.
 
-Serial by construction — two mutations live in one working tree would each
+Serial by construction. Two mutations live in one working tree would each
 report the other's result.
 
 Entries marked `"expect": "survives"` are controls. They change nothing any gate
@@ -32,7 +32,7 @@ def gate_caught(gate: str) -> bool:
 
     pytest exits 1 for a failed test and 2, 3 or 4 when collection, an internal
     error or a bad invocation stopped it. Those earn nothing: the guard never
-    produced that red. Neither does a timeout — no verdict inside the cap.
+    produced that red. Neither does a timeout; no verdict inside the cap.
     """
     argv = gate.split()
     if argv[0] == "pytest":
@@ -113,15 +113,15 @@ def main() -> int:
         if outcome == "caught" and expected_to_survive:
             controls_caught.append(entry["id"])
             print(
-                f"  CONTROL CAUGHT {entry['id']}  by `{gate}` — the gates are not running"
+                f"  CONTROL CAUGHT {entry['id']}  by `{gate}`: the gates are not running"
             )
         elif outcome == "caught":
-            print(f"  CAUGHT   {entry['id']}  by `{gate}`  — {entry['why']}")
+            print(f"  CAUGHT   {entry['id']}  by `{gate}`: {entry['why']}")
         elif expected_to_survive:
-            print(f"  CONTROL  {entry['id']}  survived, as it must  — {entry['why']}")
+            print(f"  CONTROL  {entry['id']}  survived, as it must: {entry['why']}")
         else:
             survivors.append(entry["id"])
-            print(f"  SURVIVED {entry['id']}  — {entry['why']}")
+            print(f"  SURVIVED {entry['id']}: {entry['why']}")
 
     # Derived from the lists the exit code reads, so the two cannot disagree.
     defects = [e for e in registry if e.get("expect") != "survives"]

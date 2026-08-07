@@ -1,7 +1,7 @@
 """The declared floors and bounds, held where they are declared.
 
 `pip-audit` reads the installed environment, so it cannot see a floor deleted
-from `pyproject.toml` — it only notices once a resolve happens to land below it.
+from `pyproject.toml`. It only notices once a resolve happens to land below it.
 The size constants have the mirrored problem: the tests that exercise them derive
 their payloads from the constant, so any value passes.
 """

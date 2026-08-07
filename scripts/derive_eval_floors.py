@@ -10,11 +10,11 @@ Two rules produce the five numbers. The generation rule reads the measured
 scores. The retrieval rule reads only the query count and a chosen tolerance of
 one slipped rank. Both write their measurements beside the floors.
 
-generation — the boundary is the midpoint between the worst faithful answer and
+generation: the boundary is the midpoint between the worst faithful answer and
 the best hallucinated one. The gate demands half the separation the population
 actually shows.
 
-retrieval — each floor is the score when one of the n queries slips a rank.
+retrieval: each floor is the score when one of the n queries slips a rank.
 recall@1 counts rank 1 only, so a slip and a drop-out look the same to it.
 
 MRR gets its own floor. Reciprocal rank is at least the rank-1 indicator for
@@ -58,7 +58,7 @@ def _generation() -> dict[str, Any]:
     best_hallucinated = max(scores["hallucinated"])
     # Floors derived from the metric cannot also police it: re-deriving after a
     # distortion just moves them out of its way. This is the check that does not
-    # move — groundedness is documented as a [0,1] support fraction, so a metric
+    # move. Groundedness is documented as a [0,1] support fraction, so a metric
     # worth gating must put the two labelled populations on opposite sides of
     # that range's midpoint. Below, no floors are written at all.
     if not best_hallucinated < 0.5 <= worst_faithful:

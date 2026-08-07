@@ -40,7 +40,7 @@ def test_every_exported_name_resolves() -> None:
 
 @pytest.mark.parametrize("name", ["CONFIG", "RWLock"])
 def test_the_withdrawn_names_are_not_promised(name: str) -> None:
-    """Still importable from their own module — the promise is what was dropped."""
+    """Still importable from their own module; the promise is what was dropped."""
     assert name not in package.__all__
     assert not hasattr(package, name)
     import rag_llm_infra.evidence_index as evidence_index
