@@ -264,7 +264,7 @@ def test_the_abandoned_worker_cannot_hold_interpreter_shutdown() -> None:
     )
     start = time.perf_counter()
     done = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True, timeout=60
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=30
     )
     elapsed = time.perf_counter() - start
     assert done.returncode == 0, done.stderr[-500:]

@@ -90,11 +90,12 @@ def test_every_test_file_is_named_by_some_entry() -> None:
     """The other half of the eval check above. A test file with nothing
     registered against it has never been shown able to fail, and adding one is
     ordinary drift: the directory is read here rather than listed."""
+    # Index 0 only: the replay returns on the first gate that catches, so a
+    # later one in the same entry may never run and cannot credit anything.
     covered = {
-        gate.split()[1].split("::")[0]
+        entry["gates"][0].split()[1].split("::")[0]
         for entry in REGISTRY
-        for gate in entry["gates"]
-        if gate.startswith("pytest ")
+        if entry["gates"][0].startswith("pytest ")
     }
     present = sorted(p.name for p in (REPO / "tests").glob("test_*.py"))
     assert present, "no test files found"

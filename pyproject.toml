@@ -74,8 +74,8 @@ exclude = [".git", ".venv", "__pycache__"]
 # F/E (pyflakes/pycodestyle) + I (import sort), B (bugbear: real-bug lints),
 # UP (pyupgrade: keep syntax current to the py312 floor).
 select = ["F", "E", "I", "B", "UP"]
-# E501 only: `ruff format` owns line length and declines to split 21 lines here
-# (long URLs and single-token strings), so the two rules would contradict.
+# E501 only: `ruff format` owns line length and leaves some lines long, mostly
+# prose in docstrings it will not reflow. Enabling both would contradict.
 # E402, E701 and E741 were removed after measuring that nothing needs them.
 ignore = ["E501"]
 
