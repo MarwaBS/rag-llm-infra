@@ -506,6 +506,54 @@
       "gates": ["pytest tests/test_build_context.py"]
     },
     {
+      "id": "M64",
+      "why": "a non-ascii credential reaches compare_digest as a str, turning the auth path into a 500",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "        x_api_key.encode(\"latin-1\", \"replace\"), expected.encode(\"ascii\")",
+      "replace": "        x_api_key, expected",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M65",
+      "why": "the corpus size bound goes, so a body inside the byte bound materialises a matrix orders of magnitude larger",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "    if len(req.documents) > limit:",
+      "replace": "    if False:",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M66",
+      "why": "a malformed size limit raises inside the request path instead of falling back",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "    except ValueError:\n        logger.warning",
+      "replace": "    except NotImplementedError:\n        logger.warning",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M67",
+      "why": "the security floor for the serving dependency is dropped from the extra that pulls it",
+      "file": "pyproject.toml",
+      "find": "\"uvicorn>=0.30\", \"starlette>=1.3.1\"]",
+      "replace": "\"uvicorn>=0.30\"]",
+      "gates": ["pytest tests/test_declared_bounds.py"]
+    },
+    {
+      "id": "M68",
+      "why": "the documented request-size bound and the one the code enforces drift apart",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "DEFAULT_MAX_BODY_BYTES = 1024 * 1024",
+      "replace": "DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024",
+      "gates": ["pytest tests/test_declared_bounds.py"]
+    },
+    {
+      "id": "M69",
+      "why": "the build context admits a path the allow-list does not name",
+      "file": ".dockerignore",
+      "find": "!src/\n",
+      "replace": "!src/\n!docs/\n",
+      "gates": ["pytest tests/test_build_context.py"]
+    },
+    {
       "id": "C1",
       "expect": "survives",
       "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",

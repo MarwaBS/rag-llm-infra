@@ -13,11 +13,14 @@ variable unset they answer 503 rather than running open. There is no
 configuration in which the corpus is replaceable by anyone who reaches the port.
 `/health` stays open for container probes and reveals nothing but liveness.
 
-One size bound, because the corpus is held in this process. A request body over
+Two bounds, because the corpus is held in this process and each document costs
+far more resident than it costs on the wire. A request body over
 `RAG_MAX_BODY_BYTES` (1 MiB by default) is refused with 413, and a POST without
-a `Content-Length` with 411. Document count and length need no separate limits —
-they cannot exceed what the body bound admits. `k` is already capped at the
-corpus size.
+a `Content-Length` with 411. A corpus over `RAG_MAX_CORPUS_DOCS` (20000) is
+refused with 413 too. `_demo.embed` gives every document one `EMBED_DIM`-wide
+float32 row whatever its length, so 262139 three-byte documents fit inside a
+1 MiB body and materialise a 128 MiB matrix. `k` is capped at the corpus size,
+which bounds a response only because the corpus itself is bounded.
 
 This module configures neither logging nor tracing. The command above hands the
 import to uvicorn, so call `configure_logging()` / `configure_tracing()` from
@@ -26,6 +29,7 @@ your own module and point uvicorn at that.
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from collections.abc import Awaitable, Callable
@@ -39,15 +43,45 @@ from pydantic import BaseModel, Field
 from . import __version__, get_llm, get_vector_store
 from ._demo import embed
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_MAX_BODY_BYTES = 1024 * 1024
+# A document becomes one EMBED_DIM float32 row, so the corpus matrix is
+# docs * EMBED_DIM * 4 bytes. At 128 dims that is 512 bytes per document
+# however short the document is, which is why the body bound does not bound
+# memory. 20000 documents is a 10 MiB matrix.
+DEFAULT_MAX_CORPUS_DOCS = 20_000
 
 # Sourced from the package so the served version cannot drift from the wheel's.
 app = FastAPI(title="rag-llm-infra", version=__version__)
 
 
+def _positive_int(name: str, default: int) -> int:
+    """Read per request, so a deployment can change it without a restart.
+
+    A malformed or non-positive value falls back to the default: a typo in an
+    environment variable must not turn every request into a 500 or a 413.
+    """
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer; using %d", name, raw, default)
+        return default
+    if value < 1:
+        logger.warning("%s=%d is not positive; using %d", name, value, default)
+        return default
+    return value
+
+
 def _max_body_bytes() -> int:
-    """Read per request, so a deployment can change it without a restart."""
-    return int(os.getenv("RAG_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES))
+    return _positive_int("RAG_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES)
+
+
+def _max_corpus_docs() -> int:
+    return _positive_int("RAG_MAX_CORPUS_DOCS", DEFAULT_MAX_CORPUS_DOCS)
 
 
 def require_api_key(x_api_key: str = Header(default="")) -> None:
@@ -56,10 +90,19 @@ def require_api_key(x_api_key: str = Header(default="")) -> None:
     Answering 503 rather than serving is what stops an operator who forgot the
     variable from publishing an open corpus.
     """
-    expected = os.getenv("RAG_API_KEY", "")
+    expected = os.getenv("RAG_API_KEY", "").strip()
     if not expected:
         raise HTTPException(status_code=503, detail="RAG_API_KEY is not configured")
-    if not secrets.compare_digest(x_api_key, expected):
+    if not expected.isascii():
+        # Headers arrive latin-1 decoded while the environment is UTF-8, so a
+        # non-ASCII key cannot be matched reliably. Refuse rather than reject
+        # every correct request.
+        raise HTTPException(status_code=503, detail="RAG_API_KEY must be ASCII")
+    # Compared as bytes: compare_digest raises TypeError on a non-ASCII str, and
+    # the supplied header is attacker-controlled.
+    if not secrets.compare_digest(
+        x_api_key.encode("latin-1", "replace"), expected.encode("ascii")
+    ):
         raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
 
 
@@ -105,6 +148,12 @@ def health() -> dict[str, str]:
 
 @app.post("/index", status_code=201, dependencies=[Depends(require_api_key)])
 def index(req: IndexRequest) -> dict[str, int]:
+    limit = _max_corpus_docs()
+    if len(req.documents) > limit:
+        raise HTTPException(
+            status_code=413,
+            detail=f"{len(req.documents)} documents exceeds the {limit} the corpus holds",
+        )
     store = get_vector_store("numpy")
     store.add(embed(list(req.documents)))
     global _index

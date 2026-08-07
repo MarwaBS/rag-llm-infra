@@ -34,11 +34,21 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   variable unset they answer 503, so no configuration serves openly — before
   this, anyone who reached the port could replace the corpus and read it back.
   `/health` stays open for container probes.
-- **One bound on request size.** A body over `RAG_MAX_BODY_BYTES` (1 MiB) is
-  refused with 413 before it is read, and a POST with no `Content-Length` with
-  411. Measured before: a 20 MB body was accepted. Document count and length need
-  no separate limits — they cannot exceed what the body bound admits, and `k` was
-  already capped at the corpus size.
+- **Two bounds on a request, because bytes on the wire do not bound memory.** A
+  body over `RAG_MAX_BODY_BYTES` (1 MiB) is refused with 413 before it is read,
+  and a POST with no `Content-Length` with 411. Measured before: a 20 MB body was
+  accepted. Separately a corpus over `RAG_MAX_CORPUS_DOCS` (20000) is refused:
+  every document becomes one `EMBED_DIM`-wide float32 row whatever its length, so
+  262139 three-byte documents fit in a body under 1 MiB and materialise a 128 MiB
+  matrix — 128× what the body bound admitted.
+- **The credential path cannot be made to 500.** `secrets.compare_digest` raises
+  `TypeError` on a non-ASCII `str`, and the header is attacker-controlled;
+  comparison is on bytes now. A non-ASCII `RAG_API_KEY` is reported as
+  misconfiguration, because headers arrive latin-1 while the environment is UTF-8
+  and such a key could never match. A malformed `RAG_MAX_BODY_BYTES` falls back to
+  the default with a warning rather than failing every request.
+- **A route without the credential dependency fails the build.** The auth tests
+  named the two routes that existed, so a third would have shipped open.
 - **`pip-audit --strict` runs in CI and on the release path.** Its first run
   found four advisories: `starlette` 1.2.1 (PYSEC-2026-248, -249), reached
   through `fastapi`, and `h2` 4.3.0 (CVE-2026-71554), reached through
@@ -144,8 +154,8 @@ carry no registered defect. `example.py` exits on an exception, not on a score.
   README's request bodies are posted through the app by a test and its relative
   links are resolved; `codespell` runs as a CI gate; `mypy` covers `scripts/`;
   and `llm_call` no longer claims to measure tokens, which it never did.
-- Documentation states what the code does: the shipped unauthenticated server,
-  what the log formatter does not redact, and that importing
+- Documentation states what the code does: what the log formatter does not
+  redact, and that importing
   `rag_llm_infra.serve` configures neither logging nor tracing (pinned by a
   subprocess probe with seven positive controls).
 

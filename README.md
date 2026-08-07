@@ -65,7 +65,7 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 | `rag_llm_infra.evidence_index` | `EmbeddingEngine` — SentenceTransformers embeddings + a cache (insertion-order eviction) guarded by a writer-preferring reader/writer lock, so the slow `model.encode` runs outside the lock. Memory-pressure-aware trimming activates with the `[psutil]` extra (`pip install "rag-llm-infra[psutil]"`); without it the cache is fixed-size |
 | `rag_llm_infra.tracing` | OpenTelemetry spans with console-exporter + no-op fallbacks |
 | `rag_llm_infra.log_config` | structured JSON logging + an `llm_call` timer. It measures latency; `tokens` is a field the caller fills |
-| `rag_llm_infra.serve` | FastAPI service (`/index`, `/query`, `/health`) over the vector store + LLM protocol. **No authentication** — see [SECURITY.md](SECURITY.md). Does not install `log_config` or `tracing`; call those yourself at startup |
+| `rag_llm_infra.serve` | FastAPI service over the vector store + LLM protocol. `/index` and `/query` need `X-API-Key`; `/health`, `/docs`, `/redoc` and `/openapi.json` are open — see [SECURITY.md](SECURITY.md). Does not install `log_config` or `tracing`; call those yourself at startup |
 | `rag_llm_infra.faithfulness` | `groundedness(answer, contexts)` — lexical faithfulness metric for RAG output |
 | `rag_llm_infra.fallback` | `FallbackLLM` — budget-aware multi-provider routing; drop-in `LLMProtocol` |
 

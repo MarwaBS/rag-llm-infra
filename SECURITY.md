@@ -30,13 +30,19 @@ Two caveats qualify that.
 
 **`rag_llm_infra.serve` authenticates with a shared key, and nothing else.**
 Installed with the `serve` extra and used as the `Dockerfile`'s entrypoint, it
-exposes `/health`, `/index` and `/query`. The two POST routes require `X-API-Key`
-to equal `RAG_API_KEY`, compared with `secrets.compare_digest`, and answer 503
+serves `/index` and `/query` behind a credential and `/health`, `/docs`, `/redoc`
+and `/openapi.json` without one. The two POST routes require `X-API-Key` to equal
+`RAG_API_KEY`, compared as bytes with `secrets.compare_digest`, and answer 503
 when that variable is unset — there is no configuration in which they serve
-openly. `/health` is unauthenticated and returns only `{"status": "ok"}`.
+openly. A test asserts that any route absent from that open list carries the
+credential. `/health` returns only `{"status": "ok"}`; the other three describe
+the API's shape, not its data.
 
-Request bodies over `RAG_MAX_BODY_BYTES` (1 MiB by default) are refused with 413
-before being read, and a POST with no `Content-Length` with 411.
+Two bounds. A request body over `RAG_MAX_BODY_BYTES` (1 MiB by default) is
+refused with 413 before being read, and a POST with no `Content-Length` with 411.
+A corpus over `RAG_MAX_CORPUS_DOCS` (20000) is refused with 413 as well: each
+document becomes a fixed-width float32 row, so a body inside the byte bound can
+still materialise a matrix two orders of magnitude larger.
 
 What it still does not have: rate limiting, per-caller identity, key rotation,
 audit logging, or TLS. One key holder is every key holder, and `/index` replaces

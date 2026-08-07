@@ -20,6 +20,10 @@ RULES = (REPO / ".dockerignore").read_text(encoding="utf-8")
 
 ADMITTED = [line[1:] for line in RULES.splitlines() if line.startswith("!")]
 
+# The whole allow-list, not a sample of what it happens to exclude today. A new
+# `!` line admitting anything else is the change this pins.
+EXPECTED_ADMITTED = ["pyproject.toml", "README.md", "LICENSE", "src/"]
+
 EXCLUDED = [
     ".venv/pyvenv.cfg",
     ".git/HEAD",
@@ -28,6 +32,10 @@ EXCLUDED = [
     ".env",
     "benchmarks/topk_tie_cost.py",
 ]
+
+
+def test_the_allow_list_is_exactly_these_paths() -> None:
+    assert ADMITTED == EXPECTED_ADMITTED
 
 
 def _admitted(relative: str) -> bool:
