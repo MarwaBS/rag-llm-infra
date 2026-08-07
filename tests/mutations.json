@@ -666,6 +666,30 @@
       "gates": ["pytest tests/test_reset_failure.py"]
     },
     {
+      "id": "M84",
+      "why": "a non-ascii character re-enters tracked text, where no other tool reads it",
+      "file": "README.md",
+      "find": "## Install",
+      "replace": "## Install \u2014",
+      "gates": ["pytest tests/test_tracked_text_is_ascii.py"]
+    },
+    {
+      "id": "M85",
+      "why": "the security policy supports a line that was never published, so the shipped one reads as unsupported",
+      "file": "SECURITY.md",
+      "find": "| 0.1.x   | yes       |",
+      "replace": "| 0.2.x   | yes       |",
+      "gates": ["pytest tests/test_security_policy.py"]
+    },
+    {
+      "id": "M86",
+      "why": "a documented bound differs from the one the code enforces while sharing its leading digits",
+      "file": "README.md",
+      "find": "corpora over 20000 documents",
+      "replace": "corpora over 200000 documents",
+      "gates": ["pytest tests/test_declared_bounds.py"]
+    },
+    {
       "id": "C1",
       "expect": "survives",
       "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",

@@ -2,12 +2,15 @@
 
 ## Supported versions
 
-Only the latest published minor release on PyPI receives fixes.
+The latest minor release line receives fixes. 0.2.0 is not published yet, so
+0.1.x is still what `pip install` resolves to and still receives them. It drops
+to unsupported when 0.2.0 ships.
 
 | Version | Supported |
 |---------|-----------|
 | 0.2.x   | yes       |
-| < 0.2   | no        |
+| 0.1.x   | yes       |
+| < 0.1   | no        |
 
 ## Reporting a vulnerability
 

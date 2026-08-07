@@ -25,12 +25,13 @@ Default is "auto" -> FAISS when available, NumPy otherwise.
 
 That preference is measured, not assumed. `benchmarks/backend_crossover.py`
 (384 dims, k=5, brute-force inner product) puts FAISS ahead at every size it
-tries: 0.02 ms against 0.04 at a hundred documents, 0.05 against 0.35 at a
-thousand, 7.2 against 13.9 at a hundred thousand. So `auto` is right wherever it
-is asked, and below a thousand documents the NumPy fallback costs a caller a
-fraction of a millisecond. Bounded to the host the script prints, which was
-CPython 3.13.13 with numpy 2.4.6 on Windows 11. Both backends return the same
-rows; only the tie order differs, which `search` documents.
+tries, from a hundred documents to a hundred thousand, by between 2x and 7x.
+So `auto` is right wherever it is asked, and below a thousand documents either
+backend answers in under half a millisecond. Per-size millisecond figures are
+not quoted here because they move 10-30% between runs on one host; run the
+script for current numbers. Bounded to the host it prints, which was CPython
+3.13.13 with numpy 2.4.6 on Windows 11. Both backends return the same rows;
+only the tie order differs, which `search` documents.
 """
 
 from __future__ import annotations

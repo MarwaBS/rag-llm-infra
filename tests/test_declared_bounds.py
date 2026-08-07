@@ -8,6 +8,7 @@ their payloads from the constant, so any value passes.
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -77,14 +78,42 @@ def test_the_corpus_bound_is_the_documented_one() -> None:
     assert DEFAULT_MAX_CORPUS_DOCS == 20_000
 
 
+def _document_states(document: str, number: str) -> bool:
+    """Whether `document` names `number` as a whole number.
+
+    Digit-bounded, because a substring test passes on the wrong value: `2000`
+    occurs inside `20000`, and `1 MiB` inside `11 MiB`. A tightened bound would
+    otherwise satisfy this against documents still naming the old one.
+    """
+    text = (ROOT / document).read_text(encoding="utf-8")
+    return re.search(rf"(?<!\d){re.escape(number)}(?!\d)", text) is not None
+
+
 @pytest.mark.parametrize("document", ["README.md", "SECURITY.md"])
 def test_the_documents_state_the_body_bound_the_code_uses(document: str) -> None:
     mib = DEFAULT_MAX_BODY_BYTES // (1024 * 1024)
-    assert f"{mib} MiB" in (ROOT / document).read_text(encoding="utf-8")
+    assert _document_states(document, f"{mib} MiB")
 
 
 @pytest.mark.parametrize("document", ["README.md", "SECURITY.md"])
 def test_the_documents_state_the_corpus_bound_the_code_uses(document: str) -> None:
     """An operator who gets a 413 on an 80 KB body needs the reason written
     somewhere. The byte bound was tied to the docs and this one was not."""
-    assert str(DEFAULT_MAX_CORPUS_DOCS) in (ROOT / document).read_text(encoding="utf-8")
+    assert _document_states(document, str(DEFAULT_MAX_CORPUS_DOCS))
+
+
+@pytest.mark.parametrize(
+    ("number", "expected"),
+    [
+        ("20000", True),
+        ("2000", False),
+        ("200", False),
+        ("1 MiB", True),
+        ("11 MiB", False),
+    ],
+)
+def test_the_document_check_is_not_satisfied_by_a_substring(
+    number: str, expected: bool
+) -> None:
+    """The bound this gate exists to hold is a number, not a run of digits."""
+    assert _document_states("README.md", number) is expected
