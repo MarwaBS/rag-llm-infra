@@ -698,6 +698,22 @@
       "gates": ["pytest tests/test_readme_examples.py"]
     },
     {
+      "id": "M90",
+      "why": "an action goes back to a floating tag, which a publisher can repoint at other code",
+      "file": ".github/workflows/ci.yml",
+      "find": "      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7",
+      "replace": "      - uses: actions/setup-python@v7",
+      "gates": ["pytest tests/test_workflows.py"]
+    },
+    {
+      "id": "M91",
+      "why": "the example returns one document however many the caller asked for, so its retrieval step stops being exercised",
+      "file": "example.py",
+      "find": "    _, indices = store.search(embed([query]), k=min(k, len(docs)))",
+      "replace": "    _, indices = store.search(embed([query]), k=1)",
+      "gates": ["pytest tests/test_example.py"]
+    },
+    {
       "id": "C1",
       "expect": "survives",
       "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",

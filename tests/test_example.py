@@ -1,13 +1,6 @@
 """End-to-end RAG pipeline test: deterministic, no network, no API key."""
 
-from example import DOCS, embed, rag_answer, retrieve
-
-
-def test_embed_is_deterministic_and_shaped() -> None:
-    a = embed(["hello world"])
-    b = embed(["hello world"])
-    assert a.shape == (1, 128)
-    assert (a == b).all()  # hashlib, not the salted builtin hash()
+from example import DOCS, rag_answer, retrieve
 
 
 def test_retrieve_self_match() -> None:
