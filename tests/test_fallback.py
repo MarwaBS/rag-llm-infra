@@ -20,6 +20,12 @@ class _Boom:
     async def ainvoke(self, messages, **kwargs):
         raise self._exc
 
+    def close(self) -> None:
+        pass
+
+    async def aclose(self) -> None:
+        pass
+
 
 def test_conforms_to_protocol() -> None:
     assert isinstance(FallbackLLM([MockBackend()]), LLMProtocol)
@@ -126,6 +132,12 @@ class _Counting:
 
     async def ainvoke(self, messages, **kwargs):
         return self.invoke(messages, **kwargs)
+
+    def close(self) -> None:
+        pass
+
+    async def aclose(self) -> None:
+        pass
 
 
 def test_an_exhausted_backend_is_never_asked_again() -> None:

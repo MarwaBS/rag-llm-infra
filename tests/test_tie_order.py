@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -19,6 +20,7 @@ from rag_llm_infra.vector_store import (
     FAISSVectorStore,
     NumpyVectorStore,
     QdrantVectorStore,
+    VectorStoreProtocol,
 )
 
 QUERY = np.array([[1.0, 0.0, 0.0]], dtype="float32")
@@ -28,8 +30,10 @@ def _tied_corpus(n: int = 8) -> np.ndarray:
     return np.tile(np.array([1.0, 0.0, 0.0], dtype="float32"), (n, 1))
 
 
-def _builders() -> list:
-    items = [("numpy", NumpyVectorStore)]
+def _builders() -> list[tuple[str, Callable[[], VectorStoreProtocol]]]:
+    items: list[tuple[str, Callable[[], VectorStoreProtocol]]] = [
+        ("numpy", NumpyVectorStore)
+    ]
     if FAISS_AVAILABLE:
         items.append(("faiss", FAISSVectorStore))
     if QDRANT_AVAILABLE:

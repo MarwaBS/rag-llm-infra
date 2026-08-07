@@ -17,7 +17,7 @@ Selection is via `get_llm(backend)` reading an `auto | openai | anthropic
 
 from __future__ import annotations
 
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, Literal, Protocol, TypedDict, cast, runtime_checkable
 
 __all__ = [
     "LLMProtocol",
@@ -26,6 +26,22 @@ __all__ = [
     "MockBackend",
     "get_llm",
 ]
+
+
+Role = Literal["system", "user", "assistant"]
+
+
+class Message(TypedDict):
+    """One chat turn.
+
+    Three roles, because this protocol excludes tool-calling and vision — the
+    roles those add would be surface it does not carry. `list[dict[str, Any]]`
+    accepted a misspelled key, an integer role and a message with no role at
+    all; mypy reported none of them.
+    """
+
+    role: Role
+    content: str
 
 
 @runtime_checkable
@@ -47,11 +63,11 @@ class LLMProtocol(Protocol):
     backend_name: str
     backend_version: str
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         """Synchronous chat completion. Returns the assistant text."""
         ...
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         """Async chat completion. Returns the assistant text."""
         ...
 
@@ -108,7 +124,7 @@ class OpenAIBackend:
             self._aclient = self._openai.AsyncOpenAI(api_key=self._api_key)
         return self._aclient
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         # openai's SDK uses a typed-dict union for ChatCompletionMessageParam;
         # at runtime it accepts any dict shape with 'role' + 'content'. Our
         # Protocol surface is intentionally the simpler shape, so we cast.
@@ -119,7 +135,7 @@ class OpenAIBackend:
         )
         return cast(str, resp.choices[0].message.content or "")
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         resp = await self.aclient.chat.completions.create(
             model=self._model,
             messages=cast(Any, messages),
@@ -168,14 +184,14 @@ class AnthropicBackend:
         self._model = model
         self._api_key = api_key
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         raise NotImplementedError(
             "AnthropicBackend is a contract stub. Implement per the docstring "
             "in llm_protocol.py before use. See "
             "docs/decisions/006-llm-protocol-abstraction.md for the full plan."
         )
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         raise NotImplementedError(
             "AnthropicBackend is a contract stub. Implement per the docstring "
             "in llm_protocol.py before use. See "
@@ -203,15 +219,15 @@ class MockBackend:
     def __init__(self, response: Any = "MOCK_RESPONSE") -> None:
         self._response = response
 
-    def _resolve(self, messages: list[dict[str, str]]) -> str:
+    def _resolve(self, messages: list[Message]) -> str:
         if callable(self._response):
             return str(self._response(messages))
         return str(self._response)
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         return self._resolve(messages)
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         return self._resolve(messages)
 
     def close(self) -> None:

@@ -14,7 +14,7 @@ import pytest
 
 import rag_llm_infra as package
 from rag_llm_infra import FallbackLLM, LLMProtocol, MockBackend
-from rag_llm_infra.llm_protocol import AnthropicBackend, OpenAIBackend
+from rag_llm_infra.llm_protocol import AnthropicBackend, Message, OpenAIBackend
 
 EXPORTED = {
     "LLMProtocol", "OpenAIBackend", "AnthropicBackend", "MockBackend", "get_llm",
@@ -67,10 +67,10 @@ def test_a_backend_missing_the_lifecycle_does_not_satisfy_the_protocol() -> None
         backend_name = "none"
         backend_version = "1"
 
-        def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        def invoke(self, messages: list[Message], **kwargs: Any) -> str:
             return ""
 
-        async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
             return ""
 
     assert not isinstance(NoLifecycle(), LLMProtocol)
@@ -85,10 +85,10 @@ def test_closing_the_chain_closes_every_backend_including_tripped_ones() -> None
         def __init__(self) -> None:
             self.closed = False
 
-        def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        def invoke(self, messages: list[Message], **kwargs: Any) -> str:
             return "x"
 
-        async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
             return "x"
 
         def close(self) -> None:

@@ -4,6 +4,8 @@ NumPy is always exercised; FAISS and Qdrant tests skip cleanly when those
 optional backends are not installed.
 """
 
+from collections.abc import Callable
+
 import numpy as np
 import pytest
 
@@ -80,9 +82,11 @@ class TestQdrantBackend:
         assert idx[0][0] == 2
 
 
-def _available_backends() -> list:
+def _available_backends() -> list[tuple[str, Callable[[], VectorStoreProtocol]]]:
     """(name, builder) — Qdrant needs the collection name it owns."""
-    items = [("numpy", NumpyVectorStore)]
+    items: list[tuple[str, Callable[[], VectorStoreProtocol]]] = [
+        ("numpy", NumpyVectorStore)
+    ]
     if FAISS_AVAILABLE:
         items.append(("faiss", FAISSVectorStore))
     if QDRANT_AVAILABLE:

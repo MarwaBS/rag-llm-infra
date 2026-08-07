@@ -48,7 +48,7 @@ from collections.abc import Callable, Sequence
 from functools import partial
 from typing import Any
 
-from .llm_protocol import LLMProtocol
+from .llm_protocol import LLMProtocol, Message
 
 # Errors that signal a bug or contract violation, not a recoverable provider
 # failure. These always propagate, even if `retry_on` would otherwise match them,
@@ -153,7 +153,7 @@ class FallbackLLM:
         """Index of the first backend still eligible (advances past exhausted ones)."""
         return self._active
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         last: BaseException | None = None
         for i in range(self._active, len(self._backends)):
             try:
@@ -178,7 +178,7 @@ class FallbackLLM:
             f"FallbackLLM: all {len(self._backends)} backends failed"
         ) from last
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         last: BaseException | None = None
         for i in range(self._active, len(self._backends)):
             try:

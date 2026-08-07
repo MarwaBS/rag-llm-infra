@@ -16,25 +16,34 @@ from typing import Any
 import pytest
 
 from rag_llm_infra.fallback import BudgetExhausted, FallbackLLM
+from rag_llm_infra.llm_protocol import Message
 
-MESSAGES = [{"role": "user", "content": "hi"}]
+MESSAGES: list[Message] = [{"role": "user", "content": "hi"}]
 
 
 class _Backend:
+    backend_version = "0"
+
     def __init__(self, name: str, delay: float = 0.0) -> None:
         self.backend_name = name
         self._delay = delay
         self.started = threading.Event()
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         self.started.set()
         time.sleep(self._delay)
         return f"{self.backend_name} answer"
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         self.started.set()
         await asyncio.sleep(self._delay)
         return f"{self.backend_name} answer"
+
+    def close(self) -> None:
+        pass
+
+    async def aclose(self) -> None:
+        pass
 
 
 def test_a_blocking_backend_does_not_hold_the_chain() -> None:
@@ -75,12 +84,19 @@ def test_a_failure_raised_inside_the_worker_reaches_the_caller() -> None:
 
     class Broken:
         backend_name = "broken"
+        backend_version = "0"
 
-        def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        def invoke(self, messages: list[Message], **kwargs: Any) -> str:
             raise ConnectionError("provider down")
 
-        async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
             raise ConnectionError("provider down")
+
+        def close(self) -> None:
+            pass
+
+        async def aclose(self) -> None:
+            pass
 
     chain = FallbackLLM([Broken(), _Backend("fast")], timeout_s=5.0)
     assert chain.invoke(MESSAGES) == "fast answer"
@@ -89,12 +105,19 @@ def test_a_failure_raised_inside_the_worker_reaches_the_caller() -> None:
 def test_a_non_retryable_error_still_propagates_through_the_deadline() -> None:
     class Bug:
         backend_name = "bug"
+        backend_version = "0"
 
-        def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        def invoke(self, messages: list[Message], **kwargs: Any) -> str:
             raise TypeError("a bug, not a provider failure")
 
-        async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
             raise TypeError("a bug, not a provider failure")
+
+        def close(self) -> None:
+            pass
+
+        async def aclose(self) -> None:
+            pass
 
     chain = FallbackLLM([Bug(), _Backend("fast")], timeout_s=5.0)
     with pytest.raises(TypeError):
@@ -138,12 +161,19 @@ class _Timeouts:
     """Raises `TimeoutError` itself, rather than being slow."""
 
     backend_name = "timeouts"
+    backend_version = "0"
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         raise TimeoutError("the backend's own timeout")
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         raise TimeoutError("the backend's own timeout")
+
+    def close(self) -> None:
+        pass
+
+    async def aclose(self) -> None:
+        pass
 
 
 @pytest.mark.parametrize("use_async", [False, True])
@@ -168,17 +198,24 @@ def test_a_budget_trip_raised_after_the_deadline_still_advances_the_chain() -> N
 
     class SlowBudget:
         backend_name = "slow-budget"
+        backend_version = "0"
 
         def __init__(self) -> None:
             self.calls = 0
 
-        def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        def invoke(self, messages: list[Message], **kwargs: Any) -> str:
             self.calls += 1
             time.sleep(0.5)
             raise BudgetExhausted("ceiling hit")
 
-        async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
             raise BudgetExhausted("ceiling hit")
+
+        def close(self) -> None:
+            pass
+
+        async def aclose(self) -> None:
+            pass
 
     exhausted = SlowBudget()
     chain = FallbackLLM([exhausted, _Backend("fast")], timeout_s=0.1)
