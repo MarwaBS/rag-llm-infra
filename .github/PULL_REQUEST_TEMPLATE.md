@@ -10,7 +10,7 @@
 | --- | --- |
 | `pytest --cov-fail-under=85` | |
 | `ruff check .` / `ruff format --check .` | |
-| `mypy src scripts benchmarks` | |
+| `mypy src eval tests` / `mypy scripts benchmarks` | |
 | `codespell` / `pip-audit --strict` | |
 | `python -m eval.retrieval_eval` / `generation_eval` | |
 | `python -m scripts.replay_mutations` | |

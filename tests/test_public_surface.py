@@ -30,17 +30,18 @@ LIFECYCLE = ("close", "aclose")
 
 
 class Recording:
-    """A backend that records which lifecycle method reached it.
+    """A backend that records every lifecycle call that reached it.
 
-    A single `closed` flag cannot tell `aclose` from `aclose` delegating to
-    `close`, which is the shape the async bug took.
+    A list rather than a flag: a flag cannot tell `aclose` from `aclose`
+    delegating to `close`, and last-writer-wins cannot tell either from
+    `aclose` doing both and tearing down the sync transport as well.
     """
 
     backend_name = "rec"
     backend_version = "1"
 
     def __init__(self) -> None:
-        self.closed_via: str | None = None
+        self.closed_via: list[str] = []
 
     def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         return "x"
@@ -49,10 +50,10 @@ class Recording:
         return "x"
 
     def close(self) -> None:
-        self.closed_via = "sync"
+        self.closed_via.append("sync")
 
     async def aclose(self) -> None:
-        self.closed_via = "async"
+        self.closed_via.append("async")
 
 
 def test_the_public_surface_is_exactly_this() -> None:
@@ -108,7 +109,7 @@ def test_closing_the_chain_closes_every_backend_including_tripped_ones() -> None
     chain = FallbackLLM(backends)
     chain._active = 1  # the first is tripped and must still be closed
     chain.close()
-    assert [b.closed_via for b in backends] == ["sync", "sync"]
+    assert [b.closed_via for b in backends] == [["sync"], ["sync"]]
 
 
 async def test_closing_the_chain_asynchronously_closes_every_backend() -> None:
@@ -118,4 +119,4 @@ async def test_closing_the_chain_asynchronously_closes_every_backend() -> None:
     chain = FallbackLLM(backends)
     chain._active = 1
     await chain.aclose()
-    assert [b.closed_via for b in backends] == ["async", "async"]
+    assert [b.closed_via for b in backends] == [["async"], ["async"]]

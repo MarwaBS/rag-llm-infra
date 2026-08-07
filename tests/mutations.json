@@ -682,6 +682,30 @@
       "gates": ["pytest tests/test_declared_bounds.py"]
     },
     {
+      "id": "M87",
+      "why": "the no-op span swallows the exception its body raised, so a traced block silently succeeds",
+      "file": "src/rag_llm_infra/tracing.py",
+      "find": "    def __exit__(self, *_: Any) -> None:\n        pass",
+      "replace": "    def __exit__(self, *_: Any) -> bool:\n        return True",
+      "gates": ["pytest tests/test_tracing.py"]
+    },
+    {
+      "id": "M88",
+      "why": "a consumer outside the serving layer stops filtering the sentinel, so a padded miss reads as a document",
+      "file": "example.py",
+      "find": "    return [docs[int(i)] for i in indices[0] if i >= 0]",
+      "replace": "    return [docs[int(i)] for i in indices[0]]",
+      "gates": ["pytest tests/test_sentinel_padding.py"]
+    },
+    {
+      "id": "M89",
+      "why": "a request body a reader copies from the README stops matching the model the service accepts",
+      "file": "README.md",
+      "find": "-d '{\"query\":\"vector search\",\"k\":1}'",
+      "replace": "-d '{\"question\":\"vector search\",\"k\":1}'",
+      "gates": ["pytest tests/test_readme_examples.py"]
+    },
+    {
       "id": "C1",
       "expect": "survives",
       "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",

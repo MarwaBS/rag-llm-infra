@@ -30,7 +30,7 @@ EXPECTED_IDS = frozenset(
         "M49", "M50", "M51", "M52", "M53", "M54", "M55", "M56", "M57", "M58",
         "M59", "M60", "M61", "M62", "M63", "M64", "M65", "M66", "M67", "M68",
         "M69", "M70", "M71", "M72", "M73", "M74", "M75", "M76", "M77", "M78",
-        "M79", "M80", "M81", "M82", "M83", "M85", "M86",
+        "M79", "M80", "M81", "M82", "M83", "M85", "M86", "M87", "M88", "M89",
         "C1",
     }
 )  # fmt: skip
@@ -124,12 +124,19 @@ UNPARSED = {".md", ".example", ""}
 @pytest.mark.parametrize("entry", REGISTRY, ids=lambda e: e["id"])
 def test_the_mutated_file_still_parses(entry: dict) -> None:
     """The replay decides on exit code, so a mutation that does not parse looks
-    caught while testing nothing."""
+    caught while testing nothing.
+
+    Every suffix is considered, not just the last one: `values.yaml.example`
+    ends in a suffix no parser claims, and checking only that would wave broken
+    YAML through on a rename.
+    """
     path = REPO / entry["file"]
     mutated = path.read_text(encoding="utf-8").replace(
         entry["find"], entry["replace"], 1
     )
-    parse = PARSERS.get(path.suffix)
-    assert parse or path.suffix in UNPARSED, f"no parser declared for {path.suffix!r}"
-    if parse:
+    applicable = [PARSERS[suffix] for suffix in path.suffixes if suffix in PARSERS]
+    assert applicable or path.suffix in UNPARSED, (
+        f"no parser declared for {path.suffixes!r}"
+    )
+    for parse in applicable:
         parse(mutated)

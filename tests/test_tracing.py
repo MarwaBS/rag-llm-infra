@@ -66,7 +66,9 @@ class TestConfigureTracing:
                 "os.environ", {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"}
             ):
                 tracing.configure_tracing(service_name="test")
-                # On envs without opentelemetry-sdk, _CONFIGURED stays False
+                # Whether the OTLP exporter imports or falls back to the console
+                # one, configuring is what must have happened.
+                assert tracing._CONFIGURED is True
         finally:
             tracing._CONFIGURED = original
 
@@ -179,14 +181,23 @@ class TestCurrentTraceContext:
 
 
 class TestNoOpSpan:
-    def test_context_manager(self):
+    def test_the_no_op_methods_accept_what_a_real_span_accepts(self):
         from rag_llm_infra.tracing import _NoOpSpan
 
         span = _NoOpSpan()
         with span as s:
-            s.set_attribute("key", "value")
-            s.record_exception(Exception("test"))
-            s.set_status("OK")
+            assert s.set_attribute("key", "value") is None
+            assert s.record_exception(Exception("test")) is None
+            assert s.set_status("OK") is None
+
+    def test_the_no_op_span_does_not_swallow_the_body_exception(self):
+        """`__exit__` returning anything truthy makes every traced block
+        silently succeed, and tracing is meant to observe, never to alter."""
+        from rag_llm_infra.tracing import _NoOpSpan
+
+        with pytest.raises(ValueError, match="must propagate"):
+            with _NoOpSpan():
+                raise ValueError("must propagate")
 
     def test_enter_returns_self(self):
         from rag_llm_infra.tracing import _NoOpSpan
@@ -203,9 +214,11 @@ class TestNoOpTracer:
         span = tracer.start_as_current_span("test")
         assert isinstance(span, _NoOpSpan)
 
-    def test_span_as_context_manager(self):
+    def test_span_as_context_manager_does_not_swallow_the_body_exception(self):
         from rag_llm_infra.tracing import _NoOpTracer
 
         tracer = _NoOpTracer()
-        with tracer.start_as_current_span("test") as span:
-            span.set_attribute("x", 1)
+        with pytest.raises(ValueError, match="must propagate"):
+            with tracer.start_as_current_span("test") as span:
+                span.set_attribute("x", 1)
+                raise ValueError("must propagate")

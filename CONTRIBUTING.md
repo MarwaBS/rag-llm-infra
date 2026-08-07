@@ -10,7 +10,8 @@ pip install -e ".[dev]"
 
 ruff check .
 ruff format --check .
-mypy src scripts benchmarks
+mypy src eval tests
+mypy scripts benchmarks
 codespell
 pip-audit --strict
 pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-fail-under=85
