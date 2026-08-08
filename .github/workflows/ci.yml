@@ -53,7 +53,12 @@ jobs:
         run: codespell
 
       - name: Dependency CVE gate (pip-audit)
-        run: pip-audit --strict --progress-spinner off
+        # The project is installed editable and its version is not on PyPI until
+        # it is released, so auditing the environment fails collection under
+        # --strict. Audit the third-party closure, which is what the gate is for.
+        run: |
+          pip freeze --exclude-editable > /tmp/deps.txt
+          pip-audit --strict --progress-spinner off -r /tmp/deps.txt
 
       - name: Build wheel + sdist
         run: python -m build

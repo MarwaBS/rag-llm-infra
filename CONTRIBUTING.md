@@ -13,7 +13,8 @@ ruff format --check .
 mypy src eval tests
 mypy scripts benchmarks
 codespell
-pip-audit --strict
+pip freeze --exclude-editable > /tmp/deps.txt
+pip-audit --strict -r /tmp/deps.txt
 pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-fail-under=90
 python -m eval.retrieval_eval
 python -m eval.generation_eval
