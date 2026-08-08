@@ -3,15 +3,17 @@ OpenTelemetry distributed tracing configuration.
 
 Usage (call once at application startup)::
 
-    from tracing import configure_tracing
+    from rag_llm_infra import configure_tracing
     configure_tracing()
 
-Traces flow across the request path: retrieval → LLM call → downstream work.
+This configures a provider and hands out tracers. It opens no spans of its own:
+the caller decides what to instrument. `log_config` reads the active span, so a
+record carries a trace id only inside a span the caller opened.
 
 Exporters (controlled by environment variables):
-    OTEL_EXPORTER_OTLP_ENDPOINT  — set to send to Jaeger/Tempo/Honeycomb/etc.
+    OTEL_EXPORTER_OTLP_ENDPOINT  : set to send to Jaeger/Tempo/Honeycomb/etc.
                                     e.g. "http://localhost:4317"
-    OTEL_SERVICE_NAME             — defaults to "rag-llm-service"
+    OTEL_SERVICE_NAME             : defaults to "rag-llm-service"
 
 When OTEL_EXPORTER_OTLP_ENDPOINT is not set, a ConsoleSpanExporter is used
 so traces are always visible in development without any external collector.
@@ -31,7 +33,7 @@ _CONFIGURED = False
 def configure_tracing(service_name: str | None = None) -> None:
     """
     Set up the OpenTelemetry TracerProvider.
-    Safe to call multiple times — only runs once.
+    Safe to call multiple times; only runs once.
     """
     global _CONFIGURED
     if _CONFIGURED:
@@ -47,7 +49,7 @@ def configure_tracing(service_name: str | None = None) -> None:
         )
     except ImportError:
         logger.warning(
-            "opentelemetry-sdk not installed — tracing disabled. "
+            "opentelemetry-sdk not installed; tracing disabled. "
             "Run: pip install opentelemetry-sdk opentelemetry-api"
         )
         return
@@ -74,7 +76,7 @@ def configure_tracing(service_name: str | None = None) -> None:
             logger.info("OTel OTLP exporter configured endpoint=%s", otlp_endpoint)
         except ImportError:
             logger.warning(
-                "opentelemetry-exporter-otlp-proto-grpc not installed — "
+                "opentelemetry-exporter-otlp-proto-grpc not installed; "
                 "falling back to ConsoleSpanExporter."
             )
             exporter = ConsoleSpanExporter()
@@ -119,11 +121,6 @@ def current_trace_context() -> dict[str, str]:
     except ImportError:
         pass
     return {"trace_id": "", "span_id": ""}
-
-
-# ---------------------------------------------------------------------------
-# No-op fallback so callers don't need to guard every `with tracer.start...`
-# ---------------------------------------------------------------------------
 
 
 class _NoOpSpan:

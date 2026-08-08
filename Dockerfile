@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Multi-stage build → small, non-root image running the FastAPI serving layer.
+# Multi-stage build -> small, non-root image running the FastAPI serving layer.
 
 FROM python:3.12-slim-bookworm AS builder
 WORKDIR /build

@@ -1,11 +1,12 @@
-"""Tests for tracing.py — OpenTelemetry distributed tracing.
+"""Tests for tracing.py: OpenTelemetry distributed tracing.
 
 The OTel API + SDK ship in the dev group, so the REAL configuration path
 (provider setup, exporter selection, trace-context extraction) is exercised in
 CI, not just the import-guarded fallbacks.
 """
 
-from unittest.mock import MagicMock, patch
+import logging
+from unittest.mock import patch
 
 import pytest
 
@@ -56,17 +57,42 @@ class TestConfigureTracing:
         finally:
             tracing._CONFIGURED = original
 
-    def test_configure_tracing_with_otlp_endpoint(self):
+    def test_an_endpoint_takes_the_otlp_branch_not_the_console_default(self, caplog):
+        """`_CONFIGURED is True` is set by both branches, so it cannot tell them
+        apart: deleting the read of OTEL_EXPORTER_OTLP_ENDPOINT left every
+        assertion here green. The console default announces itself, and that
+        line must be absent when an endpoint is set."""
         import rag_llm_infra.tracing as tracing
 
         original = tracing._CONFIGURED
         tracing._CONFIGURED = False
         try:
-            with patch.dict(
-                "os.environ", {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"}
+            with (
+                caplog.at_level(logging.INFO, logger="rag_llm_infra.tracing"),
+                patch.dict(
+                    "os.environ",
+                    {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"},
+                ),
             ):
                 tracing.configure_tracing(service_name="test")
-                # On envs without opentelemetry-sdk, _CONFIGURED stays False
+            assert tracing._CONFIGURED is True
+            assert "ConsoleSpanExporter active" not in caplog.text, caplog.text
+        finally:
+            tracing._CONFIGURED = original
+
+    def test_no_endpoint_takes_the_console_default(self, caplog):
+        """The other half: without one, that line must be present."""
+        import rag_llm_infra.tracing as tracing
+
+        original = tracing._CONFIGURED
+        tracing._CONFIGURED = False
+        try:
+            with (
+                caplog.at_level(logging.INFO, logger="rag_llm_infra.tracing"),
+                patch.dict("os.environ", {"OTEL_EXPORTER_OTLP_ENDPOINT": ""}),
+            ):
+                tracing.configure_tracing(service_name="test")
+            assert "ConsoleSpanExporter active" in caplog.text, caplog.text
         finally:
             tracing._CONFIGURED = original
 
@@ -86,16 +112,16 @@ class TestConfigureTracingWithSdk:
         finally:
             tracing._CONFIGURED = original
 
-    def test_otlp_endpoint_without_grpc_exporter_falls_back_to_console(self):
-        """With an OTLP endpoint set but the grpc exporter package absent,
-        configuration must degrade to the ConsoleSpanExporter and still complete
-        (the degrade-don't-crash contract), not raise."""
+    def test_otlp_endpoint_without_grpc_exporter_falls_back_to_console(self, caplog):
+        """With an endpoint set but the grpc exporter absent, configuration must
+        degrade rather than raise, and say which exporter it settled on."""
         import rag_llm_infra.tracing as tracing
 
         original = tracing._CONFIGURED
         tracing._CONFIGURED = False
         try:
             with (
+                caplog.at_level(logging.WARNING, logger="rag_llm_infra.tracing"),
                 patch.dict(
                     "os.environ",
                     {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"},
@@ -107,13 +133,14 @@ class TestConfigureTracingWithSdk:
             ):
                 tracing.configure_tracing(service_name="test-otlp-fallback")
             assert tracing._CONFIGURED is True
+            assert "falling back to ConsoleSpanExporter" in caplog.text, caplog.text
         finally:
             tracing._CONFIGURED = original
 
 
 @pytest.mark.skipif(not OTEL_SDK_AVAILABLE, reason="opentelemetry-sdk not installed")
 class TestCurrentTraceContextWithSdk:
-    """current_trace_context against REAL spans — the contract log_config relies
+    """current_trace_context against REAL spans, the contract log_config relies
     on to inject trace IDs into every log record."""
 
     def test_active_span_yields_valid_hex_ids(self):
@@ -179,14 +206,23 @@ class TestCurrentTraceContext:
 
 
 class TestNoOpSpan:
-    def test_context_manager(self):
+    def test_the_no_op_methods_accept_what_a_real_span_accepts(self):
         from rag_llm_infra.tracing import _NoOpSpan
 
         span = _NoOpSpan()
         with span as s:
-            s.set_attribute("key", "value")
-            s.record_exception(Exception("test"))
-            s.set_status("OK")
+            assert s.set_attribute("key", "value") is None
+            assert s.record_exception(Exception("test")) is None
+            assert s.set_status("OK") is None
+
+    def test_the_no_op_span_does_not_swallow_the_body_exception(self):
+        """`__exit__` returning anything truthy makes every traced block
+        silently succeed, and tracing is meant to observe, never to alter."""
+        from rag_llm_infra.tracing import _NoOpSpan
+
+        with pytest.raises(ValueError, match="must propagate"):
+            with _NoOpSpan():
+                raise ValueError("must propagate")
 
     def test_enter_returns_self(self):
         from rag_llm_infra.tracing import _NoOpSpan
@@ -203,9 +239,11 @@ class TestNoOpTracer:
         span = tracer.start_as_current_span("test")
         assert isinstance(span, _NoOpSpan)
 
-    def test_span_as_context_manager(self):
+    def test_span_as_context_manager_does_not_swallow_the_body_exception(self):
         from rag_llm_infra.tracing import _NoOpTracer
 
         tracer = _NoOpTracer()
-        with tracer.start_as_current_span("test") as span:
-            span.set_attribute("x", 1)
+        with pytest.raises(ValueError, match="must propagate"):
+            with tracer.start_as_current_span("test") as span:
+                span.set_attribute("x", 1)
+                raise ValueError("must propagate")

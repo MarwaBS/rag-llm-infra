@@ -1,4 +1,4 @@
-"""Tests for evidence_index.py — RWLock, EmbeddingEngine, config.
+"""Tests for evidence_index.py: RWLock, EmbeddingEngine, config.
 
 EmbeddingEngine is exercised for real by injecting a deterministic fake embedder
 (``model=...``), so the cache, cache-key correctness, eviction, stats, and the
@@ -118,46 +118,50 @@ class TestRWLock:
         assert sequence.index("write-end") < sequence.index("read")
 
     def test_writer_not_starved_by_continuous_readers(self):
-        """A waiting writer must not be starved by a stream of new readers
-        (writer preference). The old lock let new readers keep _readers > 0 so a
-        waiting writer never proceeded."""
+        """Writer preference: once a writer is waiting, a new reader queues
+        behind it. Without that, an unbroken stream of readers holds `_readers`
+        above zero and the writer never runs."""
         lock = RWLock()
         lock.acquire_read()  # an existing reader holds the lock
 
         writer_done = threading.Event()
+        reader2_done = threading.Event()
 
         def writer():
             lock.acquire_write()
             writer_done.set()
             lock.release_write()
 
-        wt = threading.Thread(target=writer)
-        wt.start()
-
-        deadline = time.time() + 2.0
-        while lock._writers_waiting == 0 and time.time() < deadline:
-            time.sleep(0.005)
-        assert lock._writers_waiting == 1  # writer is queued
-
-        reader2_done = threading.Event()
-
         def reader2():
             lock.acquire_read()
             reader2_done.set()
             lock.release_read()
 
-        rt = threading.Thread(target=reader2)
-        rt.start()
-        time.sleep(0.05)
-        # The new reader must yield to the waiting writer, not jump the queue.
-        assert not reader2_done.is_set()
-        assert not writer_done.is_set()  # writer still blocked by the first reader
+        # Daemon threads, an unconditional release, and bounded joins: when this
+        # regression returns, the assertion below fires while a thread is still
+        # blocked on the lock, and none of that may stop pytest reporting it.
+        wt = threading.Thread(target=writer, daemon=True)
+        rt = threading.Thread(target=reader2, daemon=True)
+        try:
+            wt.start()
+            deadline = time.time() + 2.0
+            while lock._writers_waiting == 0 and time.time() < deadline:
+                time.sleep(0.005)
+            assert lock._writers_waiting == 1  # writer is queued
 
-        lock.release_read()  # release the original reader -> writer can proceed
+            rt.start()
+            time.sleep(0.05)
+            # The new reader must yield to the waiting writer, not jump the queue.
+            assert not reader2_done.is_set()
+            assert not writer_done.is_set()  # still blocked by the first reader
+        finally:
+            lock.release_read()
+
         assert writer_done.wait(timeout=2.0)
         assert reader2_done.wait(timeout=2.0)
-        wt.join()
-        rt.join()
+        wt.join(timeout=2.0)
+        rt.join(timeout=2.0)
+        assert not (wt.is_alive() or rt.is_alive())
 
 
 class TestEmbeddingEngine:
@@ -190,10 +194,9 @@ class TestEmbeddingEngine:
         assert eng.get_stats()["cache_hits"] == 1
 
     def test_duplicate_texts_in_one_batch_encoded_once(self):
-        """Regression: a text repeated within a single embed_batch used to be
-        re-encoded once per occurrence (dedup happened only against the cache, not
-        within the batch). Identical misses must collapse to one encode, and every
-        occurrence must still receive the (identical) vector."""
+        """Dedup runs within the batch, not only against the cache: identical
+        misses collapse to one encode and every occurrence still receives the
+        same vector."""
         fake = _FakeEmbedder()
         from rag_llm_infra.evidence_index import EmbeddingEngine
 
@@ -207,9 +210,8 @@ class TestEmbeddingEngine:
         assert np.array_equal(out[0], out[3])
 
     def test_cache_key_is_case_and_space_sensitive(self):
-        """Regression: the key used to lowercase + collapse whitespace, so "US"
-        and "us" collided and the second lookup returned the WRONG vector. They
-        must both be encoded and yield distinct embeddings."""
+        """The key is the text verbatim. Folding case or whitespace would let
+        "US" and "us" collide and serve one the other's vector."""
         fake = _FakeEmbedder()
         from rag_llm_infra.evidence_index import EmbeddingEngine
 
@@ -226,6 +228,23 @@ class TestEmbeddingEngine:
         eng._max_cache_size = 3
         eng.embed_batch([f"text number {i}" for i in range(10)])
         assert eng.get_stats()["cache_size"] <= 3
+
+    def test_the_cap_evicts_the_oldest_entry_not_the_newest(self):
+        """Size alone is the same either way round. Which entry survives is what
+        separates insertion-order eviction from its opposite, and a fresh encode
+        is how a caller can tell the difference."""
+        from rag_llm_infra.evidence_index import EmbeddingEngine
+
+        fake = _FakeEmbedder()
+        eng = EmbeddingEngine(model=fake)
+        eng._max_cache_size = 3
+        eng.embed_batch([f"text number {i}" for i in range(4)])
+
+        encoded = fake.total_encoded
+        eng.embed_batch(["text number 3"])  # newest -> cached, no encode
+        assert fake.total_encoded == encoded
+        eng.embed_batch(["text number 0"])  # oldest -> evicted, re-encoded
+        assert fake.total_encoded == encoded + 1
 
     def test_stats_shape(self):
         eng = _engine()
@@ -297,6 +316,7 @@ class TestMemoryPressureTrim:
         )
         fake = _FakeEmbedder()
         eng = ei.EmbeddingEngine(model=fake)
+        eng._configured_cache_size = cap
         eng._max_cache_size = cap
         eng._last_memory_check = time.time()  # throttled during the fill
         eng.embed_batch([f"pressure text {i}" for i in range(n_texts)])
@@ -306,14 +326,13 @@ class TestMemoryPressureTrim:
 
     def test_pressure_evicts_oldest_and_shrinks_cap(self, monkeypatch):
         """Above the threshold, the cache must actually shrink (oldest first)
-        and the cap must come down: reduction = max(100, int(cap * 0.5))."""
+        and the cap must come down: reduction = configured // 2."""
         eng, fake = self._pressured_engine(monkeypatch, percent=95.0, cap=150)
         eng.embed_batch(["trigger"])  # trips the pressure check
-        assert eng._max_cache_size == 100  # max(100, int(150 * 0.5))
-        assert eng.get_stats()["cache_size"] == 100  # 50 oldest trimmed, +1, -1
-        # Behavioral proof of insertion-order eviction: the OLDEST entry was
-        # evicted (re-embedding it costs a fresh encode), the NEWEST survived
-        # (re-embedding it is a pure cache hit).
+        assert eng._max_cache_size == 75  # 150 // 2
+        assert eng.get_stats()["cache_size"] == 75  # 75 oldest trimmed, +1, -1
+        # Eviction is insertion-ordered: re-embedding the oldest entry costs a
+        # fresh encode, the newest is a pure cache hit.
         encoded_before = fake.total_encoded
         eng.embed_batch(["pressure text 0"])  # oldest -> evicted -> re-encoded
         assert fake.total_encoded == encoded_before + 1
@@ -332,9 +351,9 @@ class TestMemoryPressureTrim:
         assert fake.total_encoded == encoded_before
 
     def test_pressure_poll_is_throttled_even_without_pressure(self, monkeypatch):
-        """Regression: the 30s throttle must reset on every check, not only when
-        pressure is found — otherwise psutil is polled on every call after the
-        first quiet 30s window."""
+        """The throttle timestamp resets on every check, not only when pressure
+        is found. Otherwise psutil is polled on every call once the first quiet
+        window has passed."""
         monkeypatch.setitem(CONFIG, "adaptive_cache", True)
         monkeypatch.setitem(CONFIG, "memory_warning_threshold", 0.8)
         import rag_llm_infra.evidence_index as ei
@@ -353,3 +372,27 @@ class TestMemoryPressureTrim:
         eng.embed_batch(["one"])  # past the throttle -> polls psutil once
         eng.embed_batch(["two"])  # within 30s of the (quiet) check -> no poll
         assert calls["n"] == 1
+
+
+class TestCacheKeyIdentity:
+    """What the cache key must keep apart, and what it must fold together."""
+
+    def test_the_same_text_in_two_namespaces_is_two_entries(self):
+        from rag_llm_infra.evidence_index import EmbeddingEngine
+
+        fake = _FakeEmbedder()
+        eng = EmbeddingEngine(model=fake)
+        eng.embed_batch(["shared text"], namespace="one")
+        eng.embed_batch(["shared text"], namespace="two")
+        assert fake.total_encoded == 2
+        assert eng.get_stats()["cache_size"] == 2
+
+    def test_two_spellings_that_nfkc_folds_together_share_one_entry(self):
+        from rag_llm_infra.evidence_index import EmbeddingEngine
+
+        fake = _FakeEmbedder()
+        eng = EmbeddingEngine(model=fake)
+        eng.embed_batch(["\ufb01le"])  # the ligature form
+        eng.embed_batch(["file"])
+        assert fake.total_encoded == 1
+        assert eng.get_stats()["cache_size"] == 1

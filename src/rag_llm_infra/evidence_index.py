@@ -1,5 +1,5 @@
 """
-Embedding index — configuration, feature flags, concurrency utilities, and embedding engine.
+Embedding index: configuration, feature flags, concurrency utilities, and embedding engine.
 
 Contains the CONFIG dict, optional library feature flags (FAISS, SentenceTransformers, psutil),
 an RWLock for concurrent read/write access, and EmbeddingEngine for sentence-level
@@ -9,7 +9,7 @@ embeddings with adaptive, memory-pressure-aware caching.
 import hashlib
 import logging
 import os
-import re
+import sys
 import threading
 import time
 import unicodedata
@@ -20,17 +20,27 @@ import numpy as np
 
 # FAISS import for cache compatibility checks
 try:
-    import faiss
+    import faiss  # noqa: F401 - imported to probe availability, never called
 
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
+except Exception:
+    # Present but unloadable: a ctypes load inside the package raises OSError,
+    # which is not an ImportError. Logged below, once the logger exists.
+    FAISS_AVAILABLE = False
+    _FAISS_LOAD_ERROR: BaseException | None = sys.exc_info()[1]
 
 logger = logging.getLogger(__name__)
+if not FAISS_AVAILABLE:
+    error = globals().get("_FAISS_LOAD_ERROR")
+    if error is None:
+        logger.debug("faiss not installed; NumPy backend only")
+    else:
+        logger.warning("faiss is installed but failed to load: %s", error)
 
-# ===============================
-# CONFIGURATION
-# ===============================
+# Read once, when an EmbeddingEngine is constructed. Mutating it afterwards does
+# not reach an engine that already exists; build a new one.
 CONFIG: dict[str, Any] = {
     "max_embedding_cache": int(os.getenv("EVIDENCE_MAX_CACHE", "2000")),
     "memory_warning_threshold": float(os.getenv("EVIDENCE_MEMORY_WARN", "0.8")),
@@ -40,9 +50,6 @@ CONFIG: dict[str, Any] = {
     "embedding_model_revision": os.getenv("EVIDENCE_EMBEDDING_REVISION", "main"),
 }
 
-# ===============================
-# DEPENDENCY ROBUSTNESS
-# ===============================
 SENTENCE_TRANSFORMERS_AVAILABLE = False
 PSUTIL_AVAILABLE = False
 
@@ -52,8 +59,12 @@ try:
     from sentence_transformers import SentenceTransformer
 
     SENTENCE_TRANSFORMERS_AVAILABLE = True
-except Exception as e:
-    logger.debug("SentenceTransformers unavailable; embedding features disabled: %s", e)
+except ImportError as exc:
+    logger.debug("SentenceTransformers not installed: %s", exc)
+except Exception as exc:
+    # Installed but failing to import is a fault, not an absence. Degrade either
+    # way, but say which happened.
+    logger.warning("SentenceTransformers failed to import: %s", exc)
 
 try:
     import psutil
@@ -61,19 +72,17 @@ try:
     PSUTIL_AVAILABLE = True
 except ImportError:
     logger.debug("psutil unavailable; adaptive memory-pressure trimming disabled.")
+except Exception as exc:
+    logger.warning("psutil is installed but failed to load: %s", exc)
 
 
-# ===============================
-# CONCURRENCY UTILITIES
-# ===============================
 class RWLock:
     """Reader-writer lock: concurrent reads, exclusive writes, writer-preferring.
 
-    Writer preference avoids writer starvation: once a writer is waiting, new
-    readers queue behind it (the previous version let a steady stream of readers
-    keep `_readers > 0` forever, so a waiting writer could never proceed). Used
-    by EmbeddingEngine — short read-locked cache lookups, exclusive write-locked
-    inserts/trims — with the slow `model.encode` happening outside the lock.
+    Writer preference: once a writer is waiting, new readers queue behind it, so
+    a steady stream of readers cannot hold `_readers > 0` forever and starve it.
+    Used by EmbeddingEngine for short read-locked cache lookups and exclusive
+    write-locked inserts/trims, with the slow `model.encode` outside the lock.
     """
 
     def __init__(self) -> None:
@@ -140,19 +149,16 @@ class RWLock:
         return _Write(self)
 
 
-# ===============================
-# EMBEDDING ENGINE
-# ===============================
 class EmbeddingEngine:
     """Sentence embeddings with concurrent-read caching and memory-pressure trimming.
 
     Concurrency: a reader-writer lock (``RWLock``) guards the cache. Lookups take
-    the read lock (so cache hits run concurrently), and the slow
-    ``model.encode`` of cache misses runs OUTSIDE the lock — only the resulting
-    inserts take the exclusive write lock. The previous version held one lock
-    across the whole call, so every cache hit blocked behind another thread's
-    inference. Eviction is insertion-order (oldest first); a read does not
-    refresh recency, which is what lets lookups avoid the write lock.
+    the read lock, so cache hits run concurrently. The slow ``model.encode`` of a
+    miss runs OUTSIDE the lock. Only the resulting inserts take the exclusive
+    write lock, so a cache hit never blocks behind another thread's inference.
+    Eviction is insertion-order (oldest first); a
+    read does not refresh recency, which is what lets lookups avoid the write
+    lock.
     """
 
     def __init__(
@@ -165,9 +171,9 @@ class EmbeddingEngine:
         """
         model: inject a pre-built embedder (anything with
             ``encode(list[str], convert_to_numpy=..., show_progress_bar=...) ->
-            ndarray``). Lets the engine be exercised without sentence-transformers
-            and lets callers supply a custom model. When None, a
-            ``SentenceTransformer`` is loaded.
+            ndarray``). Runs without sentence-transformers installed, and lets a
+            caller supply their own model. When None, a ``SentenceTransformer``
+            is loaded.
         revision: pin the model revision for reproducible loads. Defaults to
             ``CONFIG['embedding_model_revision']`` (env EVIDENCE_EMBEDDING_REVISION).
         """
@@ -185,7 +191,12 @@ class EmbeddingEngine:
         self._cache: OrderedDict[str, Any] = OrderedDict()
         self._lock = RWLock()
         self._stats_lock = threading.Lock()
-        self._max_cache_size = CONFIG["max_embedding_cache"]
+        # Every CONFIG value this engine uses is read here and nowhere else, so
+        # one instance cannot be half-configured by a later mutation.
+        self._configured_cache_size = CONFIG["max_embedding_cache"]
+        self._max_cache_size = self._configured_cache_size
+        self._adaptive_cache = CONFIG["adaptive_cache"]
+        self._memory_warning_threshold = CONFIG["memory_warning_threshold"]
         self._total_requests = 0
         self._cache_hits = 0
         self._last_memory_check = time.time()
@@ -197,32 +208,37 @@ class EmbeddingEngine:
         # NFKC unicode canonicalization ONLY. Do NOT lowercase or collapse
         # whitespace: the embedding model is case- and spacing-sensitive ("US"
         # and "us", "a b" and "a  b" embed differently), so the key must keep
-        # them distinct — otherwise a lookup returns the wrong cached vector.
+        # them distinct. Otherwise a lookup returns the wrong cached vector.
         normalized = unicodedata.normalize("NFKC", text)
         raw_key = f"{namespace}:{normalized}"
         return hashlib.md5(raw_key.encode(), usedforsecurity=False).hexdigest()
 
     def _check_memory_pressure(self) -> None:
-        if not CONFIG["adaptive_cache"] or not PSUTIL_AVAILABLE:
+        if not self._adaptive_cache or not PSUTIL_AVAILABLE:
             return
         if time.time() - self._last_memory_check < 30:
             return
-        # Reset the throttle as soon as we pass it, regardless of whether
-        # pressure is found. The old code only updated the timestamp inside the
-        # pressure branch, so once 30s elapsed without pressure, psutil was
-        # polled on EVERY subsequent call.
+        # Reset the throttle here, not inside the pressure branch: otherwise a
+        # quiet period past the interval polls psutil on every subsequent call.
         self._last_memory_check = time.time()
         try:
             memory_percent = psutil.virtual_memory().percent
-            if memory_percent > CONFIG["memory_warning_threshold"] * 100:
-                reduction = max(100, int(self._max_cache_size * 0.5))
+            if memory_percent > self._memory_warning_threshold * 100:
+                # Halve the configured limit, not the already-halved one, and
+                # never exceed what the operator asked for. A floor above the
+                # configured size raises the cap under pressure.
+                reduction = max(1, self._configured_cache_size // 2)
                 with self._lock.write_lock:
                     while len(self._cache) > reduction:
                         self._cache.popitem(last=False)
                 self._max_cache_size = reduction
+            else:
+                self._max_cache_size = self._configured_cache_size
         # Memory-pressure cache trim is best-effort; never break ingest on failure.
-        except Exception:  # nosec B110
-            pass
+        except Exception as exc:
+            # Trimming is best-effort and must not break ingest, but a silent
+            # pass hides a psutil that is failing on every call.
+            logger.warning("memory-pressure trim skipped: %s", exc)
 
     def embed_batch(
         self, texts: list[str], namespace: str = "default"
@@ -231,30 +247,30 @@ class EmbeddingEngine:
             return np.empty((0, 0), dtype="float32")
         self._check_memory_pressure()
         keys = [self._normalize_cache_key(t, namespace) for t in texts]
-        results: list[Any] = [None] * len(texts)
+        vectors: list[Any] = [None] * len(texts)
 
-        # Read phase — concurrent readers share the cache.
+        # Read phase: concurrent readers share the cache.
         with self._lock.read_lock:
             for i, key in enumerate(keys):
                 cached = self._cache.get(key)
                 if cached is not None:
-                    results[i] = cached
+                    vectors[i] = cached
 
-        hits = sum(1 for r in results if r is not None)
+        hits = sum(1 for r in vectors if r is not None)
         with self._stats_lock:
             self._total_requests += len(texts)
             self._cache_hits += hits
 
-        # Compute misses OUTSIDE any lock — model.encode is the slow part and
+        # Compute misses OUTSIDE any lock. model.encode is the slow part and
         # must not block concurrent cache hits.
-        miss_indices = [i for i, r in enumerate(results) if r is None]
+        miss_indices = [i for i, r in enumerate(vectors) if r is None]
         if miss_indices:
             # Dedup identical misses within this batch by cache key, so a text
             # repeated in `texts` is encoded ONCE rather than once per occurrence
-            # (same key == same cached vector, so re-encoding it was pure waste).
+            # (same key == same cached vector, so one encode covers both).
             # "Same key" is NFKC-equality (see `_normalize_cache_key`): two raw
             # strings that NFKC-normalize identically share one encode and one
-            # vector — consistent with the cache contract, and how a real tokenizer
+            # vector, consistent with the cache contract, and how a real tokenizer
             # would treat them anyway.
             unique_keys: list[str] = []
             first_index_for_key: dict[str, int] = {}
@@ -272,10 +288,10 @@ class EmbeddingEngine:
                 for k in unique_keys:
                     self._cache[k] = emb_for_key[k]
                 for i in miss_indices:
-                    results[i] = emb_for_key[keys[i]]
+                    vectors[i] = emb_for_key[keys[i]]
                 while len(self._cache) > self._max_cache_size:
                     self._cache.popitem(last=False)
-        return np.stack(results)
+        return np.stack(vectors)
 
     def get_stats(self) -> dict[str, Any]:
         """Returns cache statistics for monitoring."""

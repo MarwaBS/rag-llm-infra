@@ -1,13 +1,15 @@
 """
 End-to-end retrieval-augmented generation, wired from this package's parts.
 
-    embed documents → index in a VectorStore → retrieve top-k for a query
-                     → build a grounded prompt → answer with an LLMProtocol backend
+    embed documents -> index in a VectorStore -> retrieve top-k for a query
+                     -> build a grounded prompt -> answer with an LLMProtocol backend
 
 Runs on the NumPy vector store and the deterministic mock LLM, so it needs no
-API key, no network, and no native libraries:
+API key, no network, and no native libraries. The wheel contains the package
+only, not this file, so run it from a clone::
 
-    pip install rag-llm-infra
+    git clone https://github.com/MarwaBS/rag-llm-infra && cd rag-llm-infra
+    pip install -e .
     python example.py
 
 In production, swap the demo embedder for `rag_llm_infra.EmbeddingEngine` (real
@@ -20,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from rag_llm_infra import get_llm, get_vector_store
 from rag_llm_infra._demo import embed
+from rag_llm_infra.llm_protocol import Message
 
 if TYPE_CHECKING:
     from rag_llm_infra import LLMProtocol
@@ -37,7 +40,7 @@ def rag_answer(docs: list[str], query: str, llm: LLMProtocol | None = None) -> s
     """Retrieve grounding context, then answer the query with an LLM backend."""
     context = retrieve(docs, query)
     grounded = "\n".join(f"- {d}" for d in context)
-    messages = [
+    messages: list[Message] = [
         {"role": "system", "content": "Answer using ONLY the provided context."},
         {"role": "user", "content": f"Context:\n{grounded}\n\nQuestion: {query}"},
     ]

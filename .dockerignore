@@ -1,0 +1,9 @@
+# Deny everything, then admit what the build needs. A deny-list would keep
+# admitting whatever is added next: `COPY . .` was pulling in the whole .venv
+# and the .git history.
+*
+
+!pyproject.toml
+!README.md
+!LICENSE
+!src/

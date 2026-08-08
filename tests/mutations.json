@@ -1,0 +1,734 @@
+{
+  "description": "Defects that must not ship. scripts/replay_mutations.py applies each one, runs its gates, and restores the file; every entry must turn at least one gate red. tests/test_mutation_registry.py keeps the anchors from going stale.",
+  "mutations": [
+    {
+      "id": "M1",
+      "why": "a docstring quotes a name the package does not export",
+      "file": "src/rag_llm_infra/tracing.py",
+      "find": "    from rag_llm_infra import configure_tracing",
+      "replace": "    from rag_llm_infra import configure_tracingg",
+      "gates": ["pytest tests/test_docstrings.py"]
+    },
+    {
+      "id": "M2",
+      "why": "a docstring quotes a submodule that does not exist",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "    from rag_llm_infra import configure_logging",
+      "replace": "    import rag_llm_infra.no_such_module",
+      "gates": ["pytest tests/test_docstrings.py"]
+    },
+    {
+      "id": "M3",
+      "why": "importing the serving layer configures logging for the whole process",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "_index: _Index | None = None",
+      "replace": "_index: _Index | None = None\n\nfrom . import log_config as _lc\n\n_lc.configure_logging()",
+      "gates": ["pytest tests/test_serve_posture.py"]
+    },
+    {
+      "id": "M4",
+      "why": "serving a request installs a tracer provider process-wide",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "def health() -> dict[str, str]:",
+      "replace": "def health() -> dict[str, str]:\n    from . import tracing as _tr\n\n    getattr(_tr, \"configure_tracing\")()",
+      "gates": ["pytest tests/test_serve_posture.py"]
+    },
+    {
+      "id": "M5",
+      "why": "the library calls basicConfig, taking the root logger from its caller",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "_index: _Index | None = None",
+      "replace": "_index: _Index | None = None\n\nimport logging as _lg\n\n_lg.basicConfig(level=_lg.INFO)",
+      "gates": ["pytest tests/test_serve_posture.py"]
+    },
+    {
+      "id": "M6",
+      "why": "the reader-writer lock loses writer preference, so writers starve",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "            while self._writer or self._writers_waiting > 0:",
+      "replace": "            while self._writer:",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M7",
+      "why": "the groundedness metric stops flagging anything below 0.33",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "    return len(claim & support) / len(claim)",
+      "replace": "    return min(1.0, len(claim & support) / len(claim) + 0.33)",
+      "gates": ["python -m eval.generation_eval", "pytest tests/test_faithfulness.py"]
+    },
+    {
+      "id": "M8",
+      "why": "/query stops filtering the sentinel index a backend pads a short row with",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "retrieved = [docs[int(i)] for i in idx[0] if i >= 0]",
+      "replace": "retrieved = [docs[int(i)] for i in idx[0]]",
+      "gates": ["pytest tests/test_serve.py"]
+    },
+    {
+      "id": "M9",
+      "why": "the served API version stops tracking the package version",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "app = FastAPI(title=\"rag-llm-infra\", version=__version__)",
+      "replace": "app = FastAPI(title=\"rag-llm-infra\", version=\"0.1.0\")",
+      "gates": ["pytest tests/test_serve.py"]
+    },
+    {
+      "id": "M10",
+      "why": "llm_call reports a constant instead of a measured latency",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "        ctx[\"latency_ms\"] = round((time.perf_counter() - start) * 1000, 1)",
+      "replace": "        ctx[\"latency_ms\"] = 0.0",
+      "gates": ["pytest tests/test_log_config.py"]
+    },
+    {
+      "id": "M11",
+      "why": "an eval floor is edited by hand instead of re-derived",
+      "file": "eval/eval_floors.json",
+      "find": "\"grounded_min\": 0.611",
+      "replace": "\"grounded_min\": 0.5",
+      "gates": ["pytest tests/test_eval_floors.py"]
+    },
+    {
+      "id": "M13",
+      "why": "the fallback retries a backend whose budget is already exhausted",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        for i in range(self._active, len(self._backends)):\n            try:\n                backend = self._backends[i]",
+      "replace": "        for i in range(0, len(self._backends)):\n            try:\n                backend = self._backends[i]",
+      "gates": ["pytest tests/test_fallback.py"]
+    },
+    {
+      "id": "M14",
+      "why": "the same, on the async path",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        for i in range(self._active, len(self._backends)):\n            try:\n                call = self._backends[i].ainvoke(messages, **kwargs)",
+      "replace": "        for i in range(0, len(self._backends)):\n            try:\n                call = self._backends[i].ainvoke(messages, **kwargs)",
+      "gates": ["pytest tests/test_fallback.py"]
+    },
+    {
+      "id": "M15",
+      "why": "the embedding cache evicts its newest entry instead of its oldest",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "                while len(self._cache) > self._max_cache_size:\n                    self._cache.popitem(last=False)",
+      "replace": "                while len(self._cache) > self._max_cache_size:\n                    self._cache.popitem(last=True)",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M16",
+      "why": "close() reaches for the async client, whose close is a coroutine nobody awaits",
+      "file": "src/rag_llm_infra/llm_protocol.py",
+      "find": "        if self._client is not None:\n            self._client.close()",
+      "replace": "        for c in (self._client, self._aclient):\n            if c is not None:\n                c.close()",
+      "gates": ["pytest tests/test_llm_protocol.py"]
+    },
+    {
+      "id": "M17",
+      "why": "groundedness counts a claim token as supported on a 3-character prefix match",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "    return len(claim & support) / len(claim)",
+      "replace": "    support |= {t for t in claim if any(s[:3] == t[:3] for s in support)}\n    return len(claim & support) / len(claim)",
+      "gates": ["pytest tests/test_faithfulness.py"]
+    },
+    {
+      "id": "M18",
+      "why": "only the first retrieved context counts as evidence",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "    for context in contexts:",
+      "replace": "    for context in contexts[:1]:",
+      "gates": ["pytest tests/test_faithfulness.py"]
+    },
+    {
+      "id": "M19",
+      "why": "digits stop being content, so a wrong number reads as grounded",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "for t in re.findall(r\"[a-z0-9]+\", text.lower())",
+      "replace": "for t in re.findall(r\"[a-z]+\", text.lower())",
+      "gates": ["pytest tests/test_faithfulness.py"]
+    },
+    {
+      "id": "M20",
+      "why": "a zero-length vector poisons every score in the index with NaN",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)\n        norms[norms == 0] = 1.0\n        self._matrix = embeddings / norms",
+      "replace": "        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)\n        self._matrix = embeddings / norms",
+      "gates": ["pytest tests/test_vector_store.py"]
+    },
+    {
+      "id": "M21",
+      "why": "an unnormalised query scores outside the [-1,1] the protocol promises",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        q_norms = np.linalg.norm(queries, axis=1, keepdims=True)\n        q_norms[q_norms == 0] = 1.0\n        norm_queries = queries / q_norms",
+      "replace": "        norm_queries = queries",
+      "gates": ["pytest tests/test_vector_store.py"]
+    },
+    {
+      "id": "M22",
+      "why": "the cache key drops the namespace, so two namespaces share one vector",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "        raw_key = f\"{namespace}:{normalized}\"",
+      "replace": "        raw_key = f\"{normalized}\"",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M23",
+      "why": "the cache key skips NFKC, so two spellings of one text encode twice",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "        normalized = unicodedata.normalize(\"NFKC\", text)",
+      "replace": "        normalized = text",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M24",
+      "why": "the fallback stops treating an unforeseen provider error as transient",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        retry_on: tuple[type[BaseException], ...] = (Exception,),",
+      "replace": "        retry_on: tuple[type[BaseException], ...] = (RuntimeError,),",
+      "gates": ["pytest tests/test_fallback.py"]
+    },
+    {
+      "id": "M25",
+      "why": "the log formatter stops dropping leading-underscore fields",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "            if key.startswith(\"_\") or key in _RECORD_OWN_FIELDS:",
+      "replace": "            if key in _RECORD_OWN_FIELDS:",
+      "gates": ["pytest tests/test_log_schema.py"]
+    },
+    {
+      "id": "M26",
+      "why": "the formatter forwards the record's own machinery as if it were caller data",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": ") | {\"message\", \"asctime\"}",
+      "replace": ")",
+      "gates": ["pytest tests/test_log_schema.py"]
+    },
+    {
+      "id": "M27",
+      "why": "a failed llm_call is logged at INFO, so an error stops standing out",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "        level = logging.WARNING if ctx.get(\"status\") == \"error\" else logging.INFO",
+      "replace": "        level = logging.INFO",
+      "gates": ["pytest tests/test_log_config.py"]
+    },
+    {
+      "id": "M12",
+      "why": "a generation fixture is lifted from its own evidence, scoring 1.0 by identity",
+      "file": "eval/generation_eval.py",
+      "find": "    \"FAISS performs vector similarity search inside the process, ranking by inner product.\",",
+      "replace": "    \"FAISS performs in-process vector similarity search with inner product.\",",
+      "gates": ["pytest tests/test_generation_eval.py"]
+    },
+    {
+      "id": "M28",
+      "why": "a stop word leaves the list, so its token starts counting as a claim",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "        \"not\",\n",
+      "replace": "",
+      "gates": ["pytest tests/test_stop_words.py"]
+    },
+    {
+      "id": "M29",
+      "why": "a content word joins the stop list, so answers stop being graded on it",
+      "file": "src/rag_llm_infra/faithfulness.py",
+      "find": "        \"the\",\n",
+      "replace": "        \"the\",\n        \"faiss\",\n",
+      "gates": ["pytest tests/test_stop_words.py"]
+    },
+    {
+      "id": "M30",
+      "why": "the embedder collapses into few buckets, so unrelated documents collide and ranking degrades",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "% EMBED_DIM\n",
+      "replace": "% 8\n",
+      "gates": ["python -m eval.retrieval_eval"]
+    },
+    {
+      "id": "M31",
+      "why": "the embedder stops folding case, so a capitalised token no longer matches its query",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "text.lower()",
+      "replace": "text",
+      "gates": ["pytest tests/test_demo_embedder.py"]
+    },
+    {
+      "id": "M32",
+      "why": "the embedder records presence instead of term frequency, so repetition stops counting",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "vecs[row, bucket] += 1.0",
+      "replace": "vecs[row, bucket] = 1.0",
+      "gates": ["pytest tests/test_demo_embedder.py"]
+    },
+    {
+      "id": "M33",
+      "why": "the embedder uses the salted built-in hash, so vectors stop being reproducible across processes",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "int(hashlib.md5(token.encode()).hexdigest(), 16)",
+      "replace": "hash(token)",
+      "gates": ["pytest tests/test_demo_embedder.py"]
+    },
+    {
+      "id": "M34",
+      "why": "the embedder stops treating digits as content, so \"v2\" and \"v3\" become one token",
+      "file": "src/rag_llm_infra/_demo.py",
+      "find": "r\"[a-z0-9]+\"",
+      "replace": "r\"[a-z]+\"",
+      "gates": ["pytest tests/test_demo_embedder.py"]
+    },
+    {
+      "id": "M35",
+      "why": "the replay calls every non-zero exit a caught defect, so a gate that could not run is credited",
+      "file": "scripts/replay_mutations.py",
+      "find": "    return done.returncode == 1",
+      "replace": "    return done.returncode != 0",
+      "gates": ["pytest tests/test_replay_mutations.py"]
+    },
+    {
+      "id": "M36",
+      "why": "the replay stops rejecting a mutation that only breaks the import, crediting a red no guard produced",
+      "file": "scripts/replay_mutations.py",
+      "find": "        if not imports_cleanly(entry[\"file\"]):",
+      "replace": "        if False:",
+      "gates": ["pytest tests/test_replay_mutations.py"]
+    },
+    {
+      "id": "M37",
+      "why": "the replay stops separating controls from defects, so a runner that reports everything caught passes",
+      "file": "scripts/replay_mutations.py",
+      "find": "        if outcome == \"caught\" and expected_to_survive:",
+      "replace": "        if False:",
+      "gates": ["pytest tests/test_replay_mutations.py"]
+    },
+    {
+      "id": "M38",
+      "why": "the pinned identifier set drops an entry, so the registry can lose that defect unnoticed",
+      "file": "tests/test_mutation_registry.py",
+      "find": "        \"M1\", \"M2\",",
+      "replace": "        \"M2\",",
+      "gates": ["pytest tests/test_mutation_registry.py"]
+    },
+    {
+      "id": "M39",
+      "why": "the producer stops refusing to derive floors from a metric that does not separate the populations",
+      "file": "scripts/derive_eval_floors.py",
+      "find": "    if not best_hallucinated < 0.5 <= worst_faithful:",
+      "replace": "    if False:",
+      "gates": ["pytest tests/test_floor_refusal.py"]
+    },
+    {
+      "id": "M40",
+      "why": "the owned collection gets a default name again, so two stores silently share one and the second add wipes the first",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "    def __init__(self, collection: str, url: str | None = None) -> None:",
+      "replace": "    def __init__(self, collection: str = \"evidence\", url: str | None = None) -> None:",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M41",
+      "why": "search sizes its rows from the request instead of the collection, so a shrunken store pads the answer with sentinels",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        held = self.size\n",
+      "replace": "        held = k\n",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M42",
+      "why": "the factory stops requiring a collection name for qdrant",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        if collection is None:\n            raise ValueError(",
+      "replace": "        if False:\n            raise ValueError(",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M43",
+      "why": "the sync deadline waits forever, so a hanging provider holds the whole chain again",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        worker.join(self._timeout_s)",
+      "replace": "        worker.join()",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M44",
+      "why": "the async path drops its deadline, so a hanging coroutine is never cancelled",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "                    return await asyncio.wait_for(task, self._timeout_s)",
+      "replace": "                    return await task",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M45",
+      "why": "a non-positive deadline is accepted, so a zero timeout silently gives every backend no time at all",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        if timeout_s is not None and timeout_s <= 0:",
+      "replace": "        if False:",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M46",
+      "why": "the trim derives its limit from the current one, so repeated pressure walks the cache down to nothing",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "                reduction = max(1, self._configured_cache_size // 2)",
+      "replace": "                reduction = max(1, self._max_cache_size // 2)",
+      "gates": ["pytest tests/test_cache_pressure_bounds.py"]
+    },
+    {
+      "id": "M47",
+      "why": "a fixed floor returns, so pressure raises any configured limit below it",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "                reduction = max(1, self._configured_cache_size // 2)",
+      "replace": "                reduction = max(100, self._configured_cache_size // 2)",
+      "gates": ["pytest tests/test_cache_pressure_bounds.py"]
+    },
+    {
+      "id": "M48",
+      "why": "the limit stops recovering, so one pressure spike shrinks the cache for the process's life",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "            else:\n                self._max_cache_size = self._configured_cache_size",
+      "replace": "",
+      "gates": ["pytest tests/test_cache_pressure_bounds.py"]
+    },
+    {
+      "id": "M49",
+      "why": "the tie-break returns to an unstable sort, so equal scores come back in whatever order the partition left",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        order = np.lexsort((top_idx, -top_scores), axis=1)",
+      "replace": "        order = np.argsort(-top_scores, axis=1, kind=\"quicksort\")",
+      "gates": ["pytest tests/test_tie_order.py"]
+    },
+    {
+      "id": "M50",
+      "why": "the tie-break outranks the score, so a worse match can be returned first",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        order = np.lexsort((top_idx, -top_scores), axis=1)",
+      "replace": "        order = np.lexsort((-top_scores, top_idx), axis=1)",
+      "gates": ["pytest tests/test_tie_order.py"]
+    },
+    {
+      "id": "M51",
+      "why": "size memoises its first reading, so it stops following the collection",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        return int(self._client.count(collection_name=self._collection).count)",
+      "replace": "        if not hasattr(self, \"_seen\"):\n            self._seen = int(self._client.count(collection_name=self._collection).count)\n        return self._seen",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M52",
+      "why": "a native library that is installed but unloadable kills the package import instead of degrading",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "except Exception:\n    # Present but unloadable",
+      "replace": "except ImportError:\n    # Present but unloadable",
+      "gates": ["pytest tests/test_broken_optional_deps.py"]
+    },
+    {
+      "id": "M53",
+      "why": "a budget trip raised after the deadline is discarded, so an exhausted provider is billed again",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "                if isinstance(exc, BudgetExhausted):\n                    self._trip_past(index)",
+      "replace": "                pass",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M54",
+      "why": "a timeout is routed through retry_on, so narrowing it strands the chain on a silent backend",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "            except BackendTimeout as exc:\n                # Always retryable, whatever `retry_on` narrows to: no answer\n                # arrived, so there is nothing for the caller to act on.\n                last = exc\n",
+      "replace": "",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M55",
+      "why": "the abandoned worker stops being a daemon, so it holds interpreter shutdown",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        worker = threading.Thread(target=run, daemon=True)",
+      "replace": "        worker = threading.Thread(target=run, daemon=False)",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M56",
+      "why": "the trace-context lookup narrows again, so a broken tracer drops every log record",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "    except Exception:\n        # Runs inside format()",
+      "replace": "    except ImportError:\n        # Runs inside format()",
+      "gates": ["pytest tests/test_broken_optional_deps.py"]
+    },
+    {
+      "id": "M57",
+      "why": "the async path stops telling its own deadline from a TimeoutError the backend raised",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "                    if not task.cancelled():\n                        raise\n",
+      "replace": "",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M58",
+      "why": "the budget high-water mark stops being monotonic, so a stale index can move it backward",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "            self._active = max(self._active, index + 1)",
+      "replace": "            self._active = index + 1",
+      "gates": ["pytest tests/test_fallback_deadline.py"]
+    },
+    {
+      "id": "M59",
+      "why": "size latches a zero reading, so search returns nothing for the life of the store",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "        return int(self._client.count(collection_name=self._collection).count)",
+      "replace": "        if getattr(self, \"_zero\", False):\n            return 0\n        held = int(self._client.count(collection_name=self._collection).count)\n        self._zero = held == 0\n        return held",
+      "gates": ["pytest tests/test_qdrant_ownership.py"]
+    },
+    {
+      "id": "M60",
+      "why": "the index route loses its credential check, so anyone reaching the port can replace the corpus",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "@app.post(\"/index\", status_code=201, dependencies=[Depends(require_api_key)])",
+      "replace": "@app.post(\"/index\", status_code=201)",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M61",
+      "why": "an unconfigured server serves openly instead of refusing",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "    if not expected:\n        raise HTTPException(status_code=503, detail=\"RAG_API_KEY is not configured\")",
+      "replace": "    if not expected:\n        return",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M62",
+      "why": "the request body loses its bound, so one call can hold as much memory as it likes",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "        if int(declared) > _max_body_bytes():",
+      "replace": "        if False:",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M63",
+      "why": "the build context stops denying by default, so the virtualenv and git history reach the image",
+      "file": ".dockerignore",
+      "find": "*\n\n!pyproject.toml",
+      "replace": "!pyproject.toml",
+      "gates": ["pytest tests/test_build_context.py"]
+    },
+    {
+      "id": "M64",
+      "why": "a non-ascii credential reaches compare_digest as a str, turning the auth path into a 500",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "        x_api_key.encode(\"latin-1\", \"replace\"), expected.encode(\"ascii\")",
+      "replace": "        x_api_key, expected",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M65",
+      "why": "the corpus size bound goes, so a body inside the byte bound materialises a matrix orders of magnitude larger",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "    if len(req.documents) > limit:",
+      "replace": "    if False:",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M66",
+      "why": "a malformed size limit raises inside the request path instead of falling back",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "    except ValueError:\n        logger.warning",
+      "replace": "    except NotImplementedError:\n        logger.warning",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M67",
+      "why": "the security floor for the serving dependency is dropped from the extra that pulls it",
+      "file": "pyproject.toml",
+      "find": "\"uvicorn>=0.30\", \"starlette>=1.3.1\"]",
+      "replace": "\"uvicorn>=0.30\"]",
+      "gates": ["pytest tests/test_declared_bounds.py"]
+    },
+    {
+      "id": "M68",
+      "why": "the documented request-size bound and the one the code enforces drift apart",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "DEFAULT_MAX_BODY_BYTES = 1024 * 1024",
+      "replace": "DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024",
+      "gates": ["pytest tests/test_declared_bounds.py"]
+    },
+    {
+      "id": "M69",
+      "why": "the build context admits a path the allow-list does not name",
+      "file": ".dockerignore",
+      "find": "!src/\n",
+      "replace": "!src/\n!docs/\n",
+      "gates": ["pytest tests/test_build_context.py"]
+    },
+    {
+      "id": "M70",
+      "why": "a route ships without the credential dependency while the guarded ones keep passing",
+      "file": "src/rag_llm_infra/serve.py",
+      "find": "@app.get(\"/health\")",
+      "replace": "@app.post(\"/purge\")\ndef purge() -> dict[str, str]:\n    global _index\n    _index = None\n    return {\"purged\": \"yes\"}\n\n\n@app.get(\"/health\")",
+      "gates": ["pytest tests/test_serve_auth.py"]
+    },
+    {
+      "id": "M71",
+      "why": "a security floor is made conditional by a marker, so it applies to no interpreter the project admits",
+      "file": "pyproject.toml",
+      "find": "\"starlette>=1.3.1\"]",
+      "replace": "\"starlette>=1.3.1; python_version<'3.0'\"]",
+      "gates": ["pytest tests/test_declared_bounds.py"]
+    },
+    {
+      "id": "M73",
+      "why": "the engine reads part of its configuration live again, so one instance can be half-configured",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "        if not self._adaptive_cache or not PSUTIL_AVAILABLE:",
+      "replace": "        if not CONFIG[\"adaptive_cache\"] or not PSUTIL_AVAILABLE:",
+      "gates": ["pytest tests/test_cache_pressure_bounds.py"]
+    },
+    {
+      "id": "M74",
+      "why": "an internal is promised as public API again",
+      "file": "src/rag_llm_infra/__init__.py",
+      "find": "    # Embedding index\n    \"EmbeddingEngine\",",
+      "replace": "    # Embedding index\n    \"EmbeddingEngine\",\n    \"CONFIG\",",
+      "gates": ["pytest tests/test_public_surface.py"]
+    },
+    {
+      "id": "M75",
+      "why": "the protocol loses its lifecycle, so a caller holding it cannot release a transport",
+      "file": "src/rag_llm_infra/llm_protocol.py",
+      "find": "    def close(self) -> None:\n        \"\"\"Release the sync transport. A backend holding none does nothing.\"\"\"\n        ...\n",
+      "replace": "",
+      "gates": ["pytest tests/test_public_surface.py"]
+    },
+    {
+      "id": "M76",
+      "why": "closing the chain skips backends already tripped, leaking their transports",
+      "file": "src/rag_llm_infra/fallback.py",
+      "find": "        for backend in self._backends:\n            backend.close()",
+      "replace": "        for backend in self._backends[self._active :]:\n            backend.close()",
+      "gates": ["pytest tests/test_public_surface.py"]
+    },
+    {
+      "id": "M77",
+      "why": "the log environment is decided at import again, so a caller setting it later is ignored",
+      "file": "src/rag_llm_infra/log_config.py",
+      "find": "    return os.getenv(\"ENV\", \"dev\").lower()",
+      "replace": "    return \"dev\"",
+      "gates": ["pytest tests/test_log_config.py"]
+    },
+    {
+      "id": "M78",
+      "why": "a variable the package reads stops being documented for the operator who must set it",
+      "file": ".env.example",
+      "find": "RAG_API_KEY=\n",
+      "replace": "",
+      "gates": ["pytest tests/test_env_example.py"]
+    },
+    {
+      "id": "M79",
+      "why": "the format hook goes, so a clean pre-commit run still fails the CI format gate",
+      "file": ".pre-commit-config.yaml",
+      "find": "      - id: ruff-format\n",
+      "replace": "",
+      "gates": ["pytest tests/test_precommit_matches_ci.py"]
+    },
+    {
+      "id": "M80",
+      "why": "the message shape widens back to a bare dict, so a misspelled key and an integer role type-check",
+      "file": "src/rag_llm_infra/llm_protocol.py",
+      "find": "    role: Role\n    content: str",
+      "replace": "    role: str\n    content: str",
+      "gates": ["pytest tests/test_type_gate.py"]
+    },
+    {
+      "id": "M81",
+      "why": "the missing-stub waiver goes global again, swallowing a typo in a first-party import path",
+      "file": "pyproject.toml",
+      "find": "# the 3.13 leg is not a second copy of the 3.12 one.\n",
+      "replace": "# the 3.13 leg is not a second copy of the 3.12 one.\nignore_missing_imports = true\n",
+      "gates": ["pytest tests/test_type_gate.py"]
+    },
+    {
+      "id": "M82",
+      "why": "reset stops clearing the store when the backend refuses, leaving stale vectors behind",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "            except Exception as exc:\n                logger.warning(\"FAISS reset failed: %s\", exc)",
+      "replace": "            except Exception as exc:\n                logger.warning(\"FAISS reset failed: %s\", exc)\n                raise",
+      "gates": ["pytest tests/test_reset_failure.py"]
+    },
+    {
+      "id": "M83",
+      "why": "the qdrant reset failure stops being reported, so a store that did not clear looks clean",
+      "file": "src/rag_llm_infra/vector_store.py",
+      "find": "                logger.warning(\"Qdrant reset failed: %s\", exc)",
+      "replace": "                logger.debug(\"Qdrant reset failed: %s\", exc)",
+      "gates": ["pytest tests/test_reset_failure.py"]
+    },
+    {
+      "id": "M85",
+      "why": "the security policy supports a line that was never published, so the shipped one reads as unsupported",
+      "file": "SECURITY.md",
+      "find": "| 0.1.x   | yes       |",
+      "replace": "| 0.2.x   | yes       |",
+      "gates": ["pytest tests/test_version.py"]
+    },
+    {
+      "id": "M86",
+      "why": "a documented bound differs from the one the code enforces while sharing its leading digits",
+      "file": "README.md",
+      "find": "corpora over 20000 documents",
+      "replace": "corpora over 200000 documents",
+      "gates": ["pytest tests/test_declared_bounds.py"]
+    },
+    {
+      "id": "M87",
+      "why": "the no-op span swallows the exception its body raised, so a traced block silently succeeds",
+      "file": "src/rag_llm_infra/tracing.py",
+      "find": "    def __exit__(self, *_: Any) -> None:\n        pass",
+      "replace": "    def __exit__(self, *_: Any) -> bool:\n        return True",
+      "gates": ["pytest tests/test_tracing.py"]
+    },
+    {
+      "id": "M88",
+      "why": "a consumer outside the serving layer stops filtering the sentinel, so a padded miss reads as a document",
+      "file": "example.py",
+      "find": "    return [docs[int(i)] for i in indices[0] if i >= 0]",
+      "replace": "    return [docs[int(i)] for i in indices[0]]",
+      "gates": ["pytest tests/test_sentinel_padding.py"]
+    },
+    {
+      "id": "M89",
+      "why": "a request body a reader copies from the README stops matching the model the service accepts",
+      "file": "README.md",
+      "find": "-d '{\"query\":\"vector search\",\"k\":1}'",
+      "replace": "-d '{\"question\":\"vector search\",\"k\":1}'",
+      "gates": ["pytest tests/test_readme_examples.py"]
+    },
+    {
+      "id": "M90",
+      "why": "an action goes back to a floating tag, which a publisher can repoint at other code",
+      "file": ".github/workflows/ci.yml",
+      "find": "      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7",
+      "replace": "      - uses: actions/setup-python@v7",
+      "gates": ["pytest tests/test_workflows.py"]
+    },
+    {
+      "id": "M91",
+      "why": "the example returns one document however many the caller asked for, so its retrieval step stops being exercised",
+      "file": "example.py",
+      "find": "    _, indices = store.search(embed([query]), k=min(k, len(docs)))",
+      "replace": "    _, indices = store.search(embed([query]), k=1)",
+      "gates": ["pytest tests/test_example.py"]
+    },
+    {
+      "id": "M92",
+      "why": "the exporter endpoint stops being read, so a configured collector is ignored and every span goes to the console",
+      "file": "src/rag_llm_infra/tracing.py",
+      "find": "    otlp_endpoint = os.getenv(\"OTEL_EXPORTER_OTLP_ENDPOINT\", \"\")",
+      "replace": "    otlp_endpoint = \"\"",
+      "gates": ["pytest tests/test_tracing.py"]
+    },
+    {
+      "id": "C1",
+      "expect": "survives",
+      "why": "control: these seeds are interchangeable, so a run that reports this caught did not run the gate",
+      "file": "tests/test_demo_embedder.py",
+      "find": "(\"0\", \"1\", \"12345\")",
+      "replace": "(\"0\", \"1\", \"31337\")",
+      "gates": ["pytest tests/test_demo_embedder.py"]
+    }
+  ]
+}

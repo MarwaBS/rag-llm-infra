@@ -1,8 +1,8 @@
 """Deterministic, dependency-light hashing embedder for the example, the eval
-harness, and the serving demo — one shared implementation.
+harness, and the serving demo. One shared implementation.
 
 Bag-of-tokens hashing into a fixed-width vector. Reproducible across processes
-(uses hashlib, not the salted built-in `hash()`). NOT for production — swap for
+(uses hashlib, not the salted built-in `hash()`). NOT for production; swap for
 `EmbeddingEngine` (real sentence embeddings).
 """
 

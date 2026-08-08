@@ -5,12 +5,13 @@ Each backend is verified against the Protocol via isinstance(LLMProtocol),
 plus per-backend behaviors (mock determinism, anthropic stub error message,
 factory routing).
 
-No live API calls — OpenAIBackend's network path is NOT exercised here.
+No live API calls. OpenAIBackend's network path is NOT exercised here.
 These tests are hermetic.
 """
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -25,10 +26,6 @@ from rag_llm_infra.llm_protocol import (
 )
 
 
-# ---------------------------------------------------------------------------
-# MockBackend — the workhorse for every other test in the repo that needs
-# a deterministic LLM. Must be boring and reliable.
-# ---------------------------------------------------------------------------
 class TestMockBackend:
     def test_default_response(self) -> None:
         llm = MockBackend()
@@ -68,16 +65,12 @@ class TestMockBackend:
         assert llm.backend_version  # non-empty
 
     def test_kwargs_ignored_silently(self) -> None:
-        """Mock ignores temperature/max_tokens/etc — caller doesn't need to
+        """Mock ignores temperature/max_tokens/etc; caller doesn't need to
         strip them when swapping in MockBackend for tests."""
         llm = MockBackend(response="ok")
         assert llm.invoke([], temperature=0.7, max_tokens=100) == "ok"
 
 
-# ---------------------------------------------------------------------------
-# AnthropicBackend — contract stub. The only wrong thing it can do is
-# silently succeed, so we test that it raises loudly with migration help.
-# ---------------------------------------------------------------------------
 class TestAnthropicBackend:
     def test_invoke_raises_not_implemented(self) -> None:
         llm = AnthropicBackend()
@@ -98,7 +91,7 @@ class TestAnthropicBackend:
             llm.invoke([])
 
     def test_conforms_to_protocol_even_as_stub(self) -> None:
-        """runtime_checkable Protocol verifies shape only — the stub has the
+        """runtime_checkable Protocol verifies shape only; the stub has the
         right methods, so isinstance passes. NotImplementedError fires at
         call time, which is the point of the stub."""
         assert isinstance(AnthropicBackend(), LLMProtocol)
@@ -108,8 +101,8 @@ class TestAnthropicBackend:
         assert llm._model == "claude-sonnet-4-6"
 
     def test_referenced_adr_actually_exists(self) -> None:
-        """The stub's error and module docstring point at ADR-006; that file
-        must exist in the repo (it previously did not)."""
+        """The stub's error and module docstring point at ADR-006, so that file
+        must exist in the repo."""
         import rag_llm_infra
 
         repo_root = Path(rag_llm_infra.__file__).resolve().parents[2]
@@ -117,9 +110,6 @@ class TestAnthropicBackend:
         assert adr.exists(), f"referenced ADR missing: {adr}"
 
 
-# ---------------------------------------------------------------------------
-# OpenAIBackend — import-time tests only (no network), via a patched SDK.
-# ---------------------------------------------------------------------------
 class TestOpenAIBackend:
     def test_instantiation_with_patched_sdk(self) -> None:
         """Construct with a mocked openai module so the test is hermetic."""
@@ -139,7 +129,7 @@ class TestOpenAIBackend:
             assert isinstance(llm, LLMProtocol)
 
     def test_missing_sdk_raises_runtime_error(self) -> None:
-        """Simulate `openai` not installed — constructor must raise with
+        """Simulate `openai` not installed; constructor must raise with
         install guidance, not a cryptic ImportError from deep in the call."""
         with patch.dict("sys.modules", {"openai": None}):
             with pytest.raises(RuntimeError, match="openai"):
@@ -153,8 +143,7 @@ class TestOpenAIBackend:
         return resp
 
     def test_invoke_extracts_assistant_text(self) -> None:
-        """invoke() must call the SDK and return choices[0].message.content —
-        previously this body had zero coverage, even against a mock."""
+        """invoke() calls the SDK and returns choices[0].message.content."""
         fake_openai = MagicMock()
         fake_openai.__version__ = "1.109.1"
         with patch.dict("sys.modules", {"openai": fake_openai}):
@@ -184,8 +173,8 @@ class TestOpenAIBackend:
             )
 
     def test_clients_constructed_lazily(self) -> None:
-        """Neither SDK client is built until first use; a sync call must not
-        spin up the async client (the old eager __init__ built both)."""
+        """Neither SDK client is built until first use, so a sync call must not
+        spin up the async one."""
         fake_openai = MagicMock()
         fake_openai.__version__ = "1.109.1"
         with patch.dict("sys.modules", {"openai": fake_openai}):
@@ -197,10 +186,6 @@ class TestOpenAIBackend:
             assert llm._aclient is None  # async client never touched
 
 
-# ---------------------------------------------------------------------------
-# Factory — get_llm routing is the only place call sites touch, so every
-# routing branch needs a test.
-# ---------------------------------------------------------------------------
 class TestFactory:
     def test_mock_routing(self) -> None:
         llm = get_llm(backend="mock")
@@ -241,7 +226,7 @@ class TestFactory:
             get_llm(backend="grok")
 
     def test_unknown_backend_error_lists_valid_options(self) -> None:
-        """The error must help the caller fix it — list the valid names."""
+        """The error must help the caller fix it: list the valid names."""
         with pytest.raises(ValueError) as exc:
             get_llm(backend="palm")
         assert "openai" in str(exc.value)
@@ -253,10 +238,6 @@ class TestFactory:
         assert llm.invoke([]) == "forwarded"
 
 
-# ---------------------------------------------------------------------------
-# Protocol shape — if someone adds a field / method, this test flags the
-# drift instantly.
-# ---------------------------------------------------------------------------
 class TestProtocolShape:
     @pytest.mark.parametrize(
         "impl_cls",
@@ -276,3 +257,60 @@ class TestProtocolShape:
     def test_backend_name_is_nonempty_string(self, impl_cls) -> None:
         instance = impl_cls()
         assert isinstance(instance.backend_name, str) and instance.backend_name
+
+
+class TestOpenAIBackendClientLifecycle:
+    """The lazily built clients, and closing whichever were built."""
+
+    def test_async_client_is_built_from_the_sdk_on_first_use(self) -> None:
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            assert llm._aclient is None
+            assert llm.aclient is fake_openai.AsyncOpenAI.return_value
+            assert llm.aclient is llm._aclient  # built once, then reused
+
+    def test_close_closes_the_sync_client_and_leaves_the_async_one_alone(self) -> None:
+        """The real `AsyncOpenAI.close` is a coroutine function, so calling it
+        from a sync method builds a coroutine nobody awaits and closes nothing.
+        Asserting it was never even called is what makes that shape red. An
+        assertion about awaiting passes under it, since it never awaits."""
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            sync = llm.client
+            llm._aclient = AsyncMock()
+            llm.close()
+            sync.close.assert_called_once()
+            llm._aclient.close.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_aclose_awaits_the_async_client(self) -> None:
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            llm._aclient = AsyncMock()
+            await llm.aclose()
+            llm._aclient.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_closing_a_backend_that_built_nothing_is_a_no_op(self) -> None:
+        fake_openai = MagicMock()
+        fake_openai.__version__ = "1.109.1"
+        with patch.dict("sys.modules", {"openai": fake_openai}):
+            llm = OpenAIBackend()
+            llm.close()
+            await llm.aclose()
+            fake_openai.OpenAI.assert_not_called()
+            fake_openai.AsyncOpenAI.assert_not_called()
+
+    def test_the_sdk_still_makes_only_the_async_close_a_coroutine(self) -> None:
+        """The split above exists because of this asymmetry in the installed
+        SDK. If it ever goes away, the split is the thing to revisit."""
+        import openai
+
+        assert not inspect.iscoroutinefunction(openai.OpenAI.close)
+        assert inspect.iscoroutinefunction(openai.AsyncOpenAI.close)

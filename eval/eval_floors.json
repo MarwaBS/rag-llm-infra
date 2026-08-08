@@ -1,0 +1,54 @@
+{
+  "generation": {
+    "floors": {
+      "grounded_min": 0.611,
+      "hallucinated_max": 0.611,
+      "margin_min": 0.166
+    },
+    "measured": {
+      "best_hallucinated": 0.4444,
+      "faithful": [
+        {
+          "answer": "FAISS performs vector similarity search inside the process, ranking by inner product.",
+          "score": 0.8
+        },
+        {
+          "answer": "Vector similarity search runs in-process in FAISS, scored by inner product.",
+          "score": 0.7778
+        },
+        {
+          "answer": "In-process similarity search over vectors is what FAISS performs, by inner product.",
+          "score": 0.7778
+        }
+      ],
+      "hallucinated": [
+        {
+          "answer": "FAISS uses quantum annealing hardware to accelerate similarity search.",
+          "score": 0.375
+        },
+        {
+          "answer": "The vector database Redis stores similarity search indexes on tape archives.",
+          "score": 0.4444
+        },
+        {
+          "answer": "Qdrant search runs on a blockchain notary stamped quarterly by astrologers.",
+          "score": 0.25
+        }
+      ],
+      "worst_faithful": 0.7778
+    },
+    "rule": "populations must separate across 0.5, the midpoint of the metric's documented range; boundary = midpoint(worst faithful, best hallucinated); margin_min = half the observed separation; floored to 3dp"
+  },
+  "retrieval": {
+    "floors": {
+      "mrr": 0.916,
+      "recall@1": 0.833
+    },
+    "measured": {
+      "mrr": 1.0,
+      "n": 6,
+      "recall@1": 1.0
+    },
+    "rule": "floor = the score when exactly one of n queries slips one rank, floored to 3dp. mrr rejects a worse slip or a second regression; recall@1 counts rank 1 only, so it rejects a second one"
+  }
+}

@@ -1,16 +1,16 @@
 """Groundedness (faithfulness) metric for RAG output.
 
 `groundedness(answer, contexts)` returns the fraction of the answer's content
-words that are supported by the retrieved context — a cheap, deterministic
-faithfulness signal you can run on every generation and gate CI on.
+words that the retrieved context supports. It is cheap and deterministic, so it
+can run on every generation and hold a CI gate.
 
-It is a *lexical* proxy: it catches answers that introduce vocabulary absent from
-the evidence (a common hallucination signature). It does not judge semantics, so
-it has three known blind spots by construction — treat it as a cheap tripwire, not
-a faithfulness guarantee, and pair it with an LLM-judge for nuanced cases:
+It is a *lexical* proxy. It catches answers that introduce vocabulary absent from
+the evidence, a common hallucination signature. It does not judge semantics, so
+it has three blind spots by construction. Treat it as a cheap tripwire, not a
+faithfulness guarantee. Pair it with an LLM-judge for the blind spots below:
 
   - **Negation-blind.** "Paris is not the capital" scores the same as "Paris is
-    the capital" — `not` is a closed-class stop word, so flipping the claim's
+    the capital". `not` is a closed-class stop word, so flipping the claim's
     polarity is invisible to a bag-of-words overlap.
   - **Dilution.** A true claim padded with a false one keeps most of its tokens
     grounded, so a single fabricated clause only dents the score rather than
@@ -72,7 +72,7 @@ _STOP: frozenset = frozenset(
 
 
 def _content_tokens(text: str) -> set[str]:
-    # len >= 2 (not > 2) so two-character acronyms — US, AI, ML, UK — count as
+    # len >= 2 (not > 2) so two-character acronyms (US, AI, ML, UK) count as
     # groundable content. Dropping them made answers built from acronyms score a
     # vacuous 1.0 (no content tokens at all). Single characters stay out: they are
     # almost always list markers or stray letters, not claims.

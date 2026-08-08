@@ -3,15 +3,15 @@ Structured logging configuration.
 
 Usage (call once at application startup)::
 
-    from log_config import configure_logging
+    from rag_llm_infra import configure_logging
     configure_logging()
 
 In production (ENV=prod) log records are emitted as single-line JSON objects
 so they can be ingested by log-aggregation systems (CloudWatch, Datadog, etc.).
 In development the default human-readable format is used.
 
-Also provides an ``llm_call`` context manager that measures latency and token
-usage for every LLM invocation and emits a structured summary::
+Also provides an ``llm_call`` context manager that times an LLM invocation and
+emits a structured summary. It measures latency; the caller supplies tokens::
 
     with llm_call("expand_summary", model="gpt-4o") as ctx:
         result = chain.invoke(inputs)
@@ -26,6 +26,7 @@ import os
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -36,16 +37,31 @@ def _get_trace_context() -> dict[str, str]:
 
         return current_trace_context()
     except Exception:
+        # Runs inside format(): raising loses the record, logging here recurses.
+        # So a tracing fault reads as "no active span".
         return {"trace_id": "", "span_id": ""}
 
 
-ENV: str = os.getenv("ENV", "dev").lower()
+def current_env() -> str:
+    """Read at call time, not at import.
+
+    A module-level snapshot is taken before most callers have set anything, so
+    `ENV=prod` chosen in a `main()` was silently ignored.
+    """
+    return os.getenv("ENV", "dev").lower()
+
+
 _CONFIGURED = False
 
 
-# ---------------------------------------------------------------------------
-# JSON formatter
-# ---------------------------------------------------------------------------
+# What logging itself puts on a record, read from a real one rather than listed.
+# A hand-written list is a blacklist over an open set: Python 3.12 added
+# `taskName` and every line started carrying `"taskName": null`. Building the set
+# from a bare LogRecord means the next such field is excluded on arrival.
+# `message` and `asctime` are added later, by Formatter.format.
+_RECORD_OWN_FIELDS = frozenset(
+    logging.LogRecord("", 0, "", 0, "", None, None).__dict__
+) | {"message", "asctime"}
 
 
 class _JsonFormatter(logging.Formatter):
@@ -56,7 +72,11 @@ class _JsonFormatter(logging.Formatter):
         # request_id is attached by the caller via `extra={"request_id": ...}`
         _request_id = getattr(record, "request_id", "")
         payload: dict[str, Any] = {
-            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            # UTC with an offset and milliseconds. A bare local-time string to
+            # the second cannot be ordered across hosts or inside a busy second.
+            "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(
+                timespec="milliseconds"
+            ),
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
@@ -67,43 +87,15 @@ class _JsonFormatter(logging.Formatter):
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         # Forward any extra={} fields attached by the caller
-        for key, val in record.__dict__.items():
-            if key.startswith("_") or key in {
-                "msg",
-                "args",
-                "levelname",
-                "levelno",
-                "pathname",
-                "filename",
-                "module",
-                "exc_info",
-                "exc_text",
-                "stack_info",
-                "lineno",
-                "funcName",
-                "created",
-                "msecs",
-                "relativeCreated",
-                "thread",
-                "threadName",
-                "processName",
-                "process",
-                "name",
-                "message",
-                "asctime",
-            }:
+        for key, value in record.__dict__.items():
+            if key.startswith("_") or key in _RECORD_OWN_FIELDS:
                 continue
-            payload[key] = val
+            payload[key] = value
         return json.dumps(payload, default=str)
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
 def configure_logging(level: str = "INFO") -> None:
-    """Configure root logger.  Safe to call multiple times — only runs once."""
+    """Configure root logger.  Safe to call multiple times; only runs once."""
     global _CONFIGURED
     if _CONFIGURED:
         return
@@ -113,12 +105,12 @@ def configure_logging(level: str = "INFO") -> None:
         _CONFIGURED = True
         return
     handler = logging.StreamHandler()
-    if ENV == "prod":
+    if current_env() == "prod":
         handler.setFormatter(_JsonFormatter())
     else:
         handler.setFormatter(
             logging.Formatter(
-                "%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+                "%(asctime)s %(levelname)-8s %(name)s | %(message)s",
                 datefmt="%H:%M:%S",
             )
         )
@@ -133,7 +125,10 @@ def llm_call(
     model: str | None = None,
     logger: logging.Logger | None = None,
 ) -> Generator[dict[str, Any], None, None]:
-    """Measure latency + tokens for a single LLM call and log the result.
+    """Time a single LLM call and log the result as one JSON line.
+
+    Measures `latency_ms` only. `tokens` is seeded to 0 for the caller to fill;
+    this module never reads a provider response.
 
     Example::
 

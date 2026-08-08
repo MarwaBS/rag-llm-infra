@@ -3,12 +3,17 @@ name: Release to PyPI
 # Tag a release to publish:  git tag v0.1.0 && git push origin v0.1.0
 # Requires a repository secret `PYPI_API_TOKEN` (a PyPI API token).
 #
-# Publishing is GATED and uses build-once / promote: the `gate` job runs the
-# same lint / format / type / test / eval suite that guards `main`, then builds
-# the wheel + sdist and validates THAT artifact (installs the built wheel in a
-# clean venv, imports it, and checks the py.typed marker ships). The exact bytes
-# it built and validated are uploaded as a workflow artifact; the `publish` job
-# downloads and uploads those same bytes — it never rebuilds. So the wheel that
+# Publishing is GATED and uses build-once / promote: the `gate` job runs lint,
+# format, mypy, pytest at the same 90% floor, both eval gates, and the mutation
+# replay, over the same coverage scope. It runs 3.12 only, where `main` runs the
+# 3.12 + 3.13 matrix; it skips the end-to-end example; and it has no `image` job,
+# so nothing on this path builds the container or exercises its credential check,
+# query path or HEALTHCHECK. It adds the steps below that `main` has no use for.
+# It then builds the wheel + sdist and validates THAT artifact (installs the
+# built wheel in a clean venv, imports it, and checks the py.typed marker
+# ships). The exact bytes it built and validated are uploaded as a workflow
+# artifact; the `publish` job
+# downloads and uploads those same bytes; it never rebuilds. So the wheel that
 # reaches PyPI is bit-identical to the one the gate validated, not a fresh build
 # that nothing tested. The tag must match the package version, and the upload is
 # idempotent (`--skip-existing`) so a re-pushed tag does not hard-fail.
@@ -27,8 +32,8 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
       - name: Install (editable, dev extras incl. FAISS + Qdrant + serve)
@@ -49,13 +54,28 @@ jobs:
       - name: Format check (ruff)
         run: ruff format --check .
       - name: Type-check (mypy)
-        run: mypy src
+        run: |
+          mypy src eval tests
+          mypy scripts benchmarks
+
+      - name: Spell check (codespell)
+        run: codespell
+      - name: Dependency CVE gate (pip-audit)
+        # The project is installed editable and its version is not on PyPI until
+        # it is released, so auditing the environment fails collection under
+        # --strict. Audit the third-party closure, which is what the gate is for.
+        run: |
+          pip freeze --exclude-editable > /tmp/deps.txt
+          pip-audit --strict --progress-spinner off -r /tmp/deps.txt
+
       - name: Tests (same coverage floor as CI)
-        run: pytest -q --cov=src/rag_llm_infra --cov-report=term-missing --cov-fail-under=85
+        run: pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-report=term-missing --cov-fail-under=90
       - name: Retrieval eval gate (recall@1 / MRR)
         run: python -m eval.retrieval_eval
       - name: Generation eval gate (groundedness / faithfulness)
         run: python -m eval.generation_eval
+      - name: Replay the mutation registry (the suite can fail)
+        run: python -m scripts.replay_mutations
       - name: Build wheel + sdist (the artifact that will ship)
         run: |
           python -m pip install --upgrade build
@@ -72,7 +92,7 @@ jobs:
           # PEP 561 marker must be inside the wheel for downstream type-checking.
           /tmp/wheelcheck/bin/python -c "import importlib.resources as r, sys; p = r.files('rag_llm_infra') / 'py.typed'; sys.exit(0 if p.is_file() else 'py.typed missing from installed wheel')"
       - name: Upload the validated artifact for the publish job
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist
           path: dist/
@@ -83,11 +103,11 @@ jobs:
     needs: gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
       - name: Download the exact artifact the gate built + validated
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dist
           path: dist/

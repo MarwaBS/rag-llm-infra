@@ -1,15 +1,15 @@
 """
-LLMProtocol — vendor-neutral chat-completion abstraction.
+LLMProtocol: vendor-neutral chat-completion abstraction.
 
 Mirrors `vector_store.py:VectorStoreProtocol` for LLM calls. See
 `docs/decisions/006-llm-protocol-abstraction.md` for the full rationale.
 
 Runtime backends:
-    - OpenAIBackend  — production default
-    - AnthropicBackend — contract stub, raises NotImplementedError with
+    - OpenAIBackend  : production default
+    - AnthropicBackend : contract stub, raises NotImplementedError with
       migration TODO. Locks the interface so a later implementer does not
       have to redesign call sites.
-    - MockBackend    — deterministic, no network, no cost; for tests.
+    - MockBackend    : deterministic, no network, no cost; for tests.
 
 Selection is via `get_llm(backend)` reading an `auto | openai | anthropic
 | mock` value.
@@ -17,7 +17,7 @@ Selection is via `get_llm(backend)` reading an `auto | openai | anthropic
 
 from __future__ import annotations
 
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, Literal, Protocol, TypedDict, cast, runtime_checkable
 
 __all__ = [
     "LLMProtocol",
@@ -28,21 +28,34 @@ __all__ = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Protocol — the surface area callers depend on
-# ---------------------------------------------------------------------------
+Role = Literal["system", "user", "assistant"]
+
+
+class Message(TypedDict):
+    """One chat turn.
+
+    Three roles, because this protocol excludes tool-calling and vision. The
+    roles those add would be surface it does not carry. `list[dict[str, Any]]`
+    accepted a misspelled key, an integer role and a message with no role at
+    all; mypy reported none of them.
+    """
+
+    role: Role
+    content: str
+
+
 @runtime_checkable
 class LLMProtocol(Protocol):
     """Minimal chat-completion contract used by callers.
 
     Implementations wrap a specific LLM vendor behind a uniform surface so
     callers can switch backends via config. This protocol deliberately does
-    NOT include streaming, tool-calling, or vision inputs — those are
+    NOT include streaming, tool-calling, or vision inputs. Those are
     vendor-specific today and would leak the abstraction. Narrow beats
     feature-complete; add surface when a second real backend proves the
     need.
 
-    Cost tracking is deliberately NOT handled here — it belongs at the
+    Cost tracking is deliberately NOT handled here. It belongs at the
     service-layer boundary, so every backend benefits from one cost
     ceiling without reimplementing it per vendor.
     """
@@ -50,41 +63,48 @@ class LLMProtocol(Protocol):
     backend_name: str
     backend_version: str
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         """Synchronous chat completion. Returns the assistant text."""
         ...
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         """Async chat completion. Returns the assistant text."""
         ...
 
+    def close(self) -> None:
+        """Release the sync transport. A backend holding none does nothing."""
+        ...
 
-# ---------------------------------------------------------------------------
-# OpenAI — production default
-# ---------------------------------------------------------------------------
+    async def aclose(self) -> None:
+        """Release the async transport.
+
+        Separate from `close` because an async client's own close is a
+        coroutine: calling it from a sync method discards it and closes nothing.
+        """
+        ...
+
+
 class OpenAIBackend:
     """Wraps `openai.OpenAI` / `openai.AsyncOpenAI`.
 
-    The `model` default (gpt-4o) matches the existing direct call sites.
-    `api_key` falls through to `OPENAI_API_KEY` env when None.
+    `model` and `api_key` are pass-through defaults, not recommendations: no
+    model was benchmarked here, and `api_key=None` falls through to the SDK's
+    own `OPENAI_API_KEY` lookup. Pass `model=` to pin the one you have measured.
     """
 
     backend_name = "openai"
 
     def __init__(self, model: str = "gpt-4o", api_key: str | None = None) -> None:
         try:
-            import openai  # imported lazily so `import llm_protocol` works without the SDK
+            import openai  # lazy: importing this module must not need the SDK
         except ImportError as exc:
             raise RuntimeError(
                 "OpenAIBackend requires the `openai` package. "
                 "Install `openai>=1.0` or pick another backend via get_llm(backend=...)."
             ) from exc
 
-        # Construct the SDK clients lazily, on first use. The previous version
-        # eagerly built BOTH the sync and async client in __init__ — so a purely
-        # sync caller still opened an async client (and an httpx pool) it never
-        # used and never closed. Now only the client a caller actually touches is
-        # created, and both are closeable.
+        # Construct the SDK clients lazily: building both eagerly would open an
+        # httpx pool a purely sync caller never touches and never closes.
         self._openai = openai
         self._api_key = api_key
         self._model = model
@@ -104,7 +124,7 @@ class OpenAIBackend:
             self._aclient = self._openai.AsyncOpenAI(api_key=self._api_key)
         return self._aclient
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         # openai's SDK uses a typed-dict union for ChatCompletionMessageParam;
         # at runtime it accepts any dict shape with 'role' + 'content'. Our
         # Protocol surface is intentionally the simpler shape, so we cast.
@@ -115,7 +135,7 @@ class OpenAIBackend:
         )
         return cast(str, resp.choices[0].message.content or "")
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         resp = await self.aclient.chat.completions.create(
             model=self._model,
             messages=cast(Any, messages),
@@ -124,34 +144,23 @@ class OpenAIBackend:
         return cast(str, resp.choices[0].message.content or "")
 
     def close(self) -> None:
-        """Close whichever SDK clients were created (best-effort)."""
-        for client in (self._client, self._aclient):
-            close = getattr(client, "close", None)
-            if close is not None:
-                try:
-                    close()
-                except Exception:  # pragma: no cover - defensive
-                    pass
+        """Close the sync client if one was built. The async client needs
+        `aclose()`: `AsyncOpenAI.close` is a coroutine function, so calling it
+        from here would discard the coroutine and close nothing."""
+        if self._client is not None:
+            self._client.close()
+
+    async def aclose(self) -> None:
+        """Close the async client if one was built."""
+        if self._aclient is not None:
+            await self._aclient.close()
 
 
-# ---------------------------------------------------------------------------
-# Anthropic — contract stub
-# ---------------------------------------------------------------------------
 class AnthropicBackend:
-    """Intentionally unimplemented. Exists to lock the protocol surface.
+    """Raises `NotImplementedError`. Exists to lock the protocol surface.
 
-    Migration path when promoting to a real backend:
-
-    1. `pip install anthropic` (add it to the project dependencies in pyproject.toml).
-    2. Replace both `invoke` / `ainvoke` bodies with calls to
-       `anthropic.Anthropic().messages.create(model=..., system=..., messages=...)`
-       and `anthropic.AsyncAnthropic()` respectively.
-    3. Anthropic expects `system` as a top-level arg, not a role in
-       `messages`. Extract the system message before the API call.
-    4. Normalize the response: `resp.content[0].text` -> `str`.
-    5. Map OpenAI-style kwargs (`temperature`, `max_tokens`) 1:1.
-    6. Update `backend_version = anthropic.__version__`.
-    7. Add a live-call test gated on `ANTHROPIC_API_KEY` being present.
+    `model` is a placeholder, not a measured choice. The migration plan is in
+    `docs/decisions/006-llm-protocol-abstraction.md`.
     """
 
     backend_name = "anthropic"
@@ -165,24 +174,27 @@ class AnthropicBackend:
         self._model = model
         self._api_key = api_key
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         raise NotImplementedError(
             "AnthropicBackend is a contract stub. Implement per the docstring "
             "in llm_protocol.py before use. See "
             "docs/decisions/006-llm-protocol-abstraction.md for the full plan."
         )
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         raise NotImplementedError(
             "AnthropicBackend is a contract stub. Implement per the docstring "
             "in llm_protocol.py before use. See "
             "docs/decisions/006-llm-protocol-abstraction.md for the full plan."
         )
 
+    def close(self) -> None:
+        """Never opens a transport, so closing is not the unimplemented part."""
 
-# ---------------------------------------------------------------------------
-# Mock — deterministic, for tests
-# ---------------------------------------------------------------------------
+    async def aclose(self) -> None:
+        """Never opens a transport, so closing is not the unimplemented part."""
+
+
 class MockBackend:
     """Deterministic backend for tests and local dry-runs. No network, no cost.
 
@@ -197,21 +209,24 @@ class MockBackend:
     def __init__(self, response: Any = "MOCK_RESPONSE") -> None:
         self._response = response
 
-    def _resolve(self, messages: list[dict[str, str]]) -> str:
+    def _resolve(self, messages: list[Message]) -> str:
         if callable(self._response):
             return str(self._response(messages))
         return str(self._response)
 
-    def invoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         return self._resolve(messages)
 
-    async def ainvoke(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+    async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         return self._resolve(messages)
 
+    def close(self) -> None:
+        """Holds no transport."""
 
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
+    async def aclose(self) -> None:
+        """Holds no transport."""
+
+
 _VALID_BACKENDS = ("auto", "openai", "anthropic", "mock")
 
 
@@ -219,10 +234,14 @@ def get_llm(backend: str = "auto", **kwargs: Any) -> LLMProtocol:
     """Select an `LLMProtocol` implementation by name.
 
     `backend`:
-        - `auto`      — picks OpenAI (the only production backend today).
-        - `openai`    — explicit OpenAI.
-        - `anthropic` — stub; raises at call time (see AnthropicBackend).
-        - `mock`      — deterministic, for tests.
+        - `auto`      : an alias for `openai`, not a capability probe. Raises
+                        when `openai` is absent rather than degrading to
+                        `mock`: a fake answer is worse than no answer. Unlike
+                        `get_vector_store("auto")`, where every backend
+                        returns real neighbours and falling back is safe.
+        - `openai`    : explicit OpenAI.
+        - `anthropic` : stub; raises at call time (see AnthropicBackend).
+        - `mock`      : deterministic, for tests.
 
     Extra kwargs are forwarded to the backend constructor.
     """

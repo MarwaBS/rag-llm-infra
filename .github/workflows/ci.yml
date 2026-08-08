@@ -11,15 +11,27 @@ on:
 permissions:
   contents: read
 
+# A superseded push has nothing to prove. Without this, rapid pushes run every
+# leg and the container job to completion against code already replaced.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Kept equal to what `requires-python` admits: widening the specifier
+      # without adding the leg claims an interpreter nothing has executed.
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install (editable, dev extras incl. FAISS + Qdrant + serve)
         run: |
@@ -33,15 +45,29 @@ jobs:
         run: ruff format --check .
 
       - name: Type-check (mypy)
-        run: mypy src
+        run: |
+          mypy src eval tests
+          mypy scripts benchmarks
+
+      - name: Spell check (codespell)
+        run: codespell
+
+      - name: Dependency CVE gate (pip-audit)
+        # The project is installed editable and its version is not on PyPI until
+        # it is released, so auditing the environment fails collection under
+        # --strict. Audit the third-party closure, which is what the gate is for.
+        run: |
+          pip freeze --exclude-editable > /tmp/deps.txt
+          pip-audit --strict --progress-spinner off -r /tmp/deps.txt
 
       - name: Build wheel + sdist
         run: python -m build
 
       - name: Tests (FAISS / Qdrant backends + serve now exercised, not skipped)
-        # Coverage floor: measured 93% when the gate was added; 85 is a
-        # tight-but-safe ratchet, not an aspiration.
-        run: pytest -q --cov=src/rag_llm_infra --cov-report=term-missing --cov-fail-under=85
+        # The run below prints the measured figure, so no number is pinned here.
+        # 90 sits far enough under it to absorb roughly 40 uncovered statements,
+        # about one new module, without reddening on unrelated work.
+        run: pytest -q --cov=src/rag_llm_infra --cov=scripts --cov-report=term-missing --cov-fail-under=90
 
       - name: Retrieval eval gate (recall@1 / MRR)
         run: python -m eval.retrieval_eval
@@ -51,3 +77,69 @@ jobs:
 
       - name: Run end-to-end example
         run: python example.py
+
+      # Green above says the suite passes; this says the suite can fail. Each
+      # registered defect is applied in turn and must turn a gate red.
+      - name: Replay the mutation registry
+        run: python -m scripts.replay_mutations
+
+  # The Dockerfile shipped a CMD and a HEALTHCHECK that no workflow had ever
+  # executed. Building proves it compiles; only starting it and calling the API
+  # proves the image serves.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Build the image
+        run: docker build -t rag-llm-infra:ci .
+
+      - name: The image stays small
+        run: |
+          # The build is multi-stage, so the final image never held the
+          # context. This caps what the runtime layer carries.
+          size="$(docker image inspect rag-llm-infra:ci --format '{{.Size}}')"
+          echo "image size: $((size / 1024 / 1024)) MiB"
+          test "$size" -lt 838860800 || { echo "::error::image over 800 MiB"; exit 1; }
+
+      - name: Start it
+        run: |
+          docker run -d --name rli -p 8000:8000 -e RAG_API_KEY=ci-key rag-llm-infra:ci
+          for i in $(seq 1 30); do
+            if curl -fsS localhost:8000/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS localhost:8000/health
+
+      - name: The running image enforces the credential
+        run: |
+          code="$(curl -s -o /dev/null -w '%{http_code}' -XPOST localhost:8000/index \
+            -H 'content-type: application/json' -d '{"documents":["x"]}')"
+          test "$code" = "401" || { echo "::error::unauthenticated /index got $code"; exit 1; }
+
+      - name: The running image answers a real query
+        run: |
+          set -euo pipefail
+          auth='X-API-Key: ci-key'
+          curl -fsS -XPOST localhost:8000/index -H "$auth" \
+            -H 'content-type: application/json' \
+            -d '{"documents":["FAISS is in-process vector search","Qdrant is a vector database"]}'
+          body="$(curl -fsS -XPOST localhost:8000/query -H "$auth" \
+            -H 'content-type: application/json' -d '{"query":"vector search","k":1}')"
+          echo "$body"
+          echo "$body" | grep -q "in-process vector search" \
+            || { echo "::error::the image did not retrieve the expected document"; exit 1; }
+
+      - name: The container reports itself healthy
+        run: |
+          for i in $(seq 1 30); do
+            state="$(docker inspect --format '{{.State.Health.Status}}' rli)"
+            [ "$state" = "healthy" ] && exit 0
+            [ "$state" = "unhealthy" ] && { docker logs rli; exit 1; }
+            sleep 2
+          done
+          echo "::error::HEALTHCHECK never reported healthy"; docker logs rli; exit 1
+
+      - name: Stop it
+        if: always()
+        run: docker rm -f rli || true
