@@ -62,6 +62,7 @@ def test_the_vector_is_the_same_in_a_fresh_interpreter() -> None:
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,
         )
         seen.add(proc.stdout.strip())
     assert len(seen) == 1, "the embedding changed with the hash seed"

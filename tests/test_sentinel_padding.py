@@ -60,6 +60,7 @@ def _sources() -> list[Path]:
         capture_output=True,
         text=True,
         check=True,
+        timeout=30,
     ).stdout.split()
     return [REPO / rel for rel in listed if not rel.startswith("tests/")]
 

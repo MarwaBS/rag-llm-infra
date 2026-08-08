@@ -80,6 +80,7 @@ def _report(body: str = "") -> str:
         capture_output=True,
         text=True,
         check=True,
+        timeout=30,
     )
     return result.stdout.strip()
 

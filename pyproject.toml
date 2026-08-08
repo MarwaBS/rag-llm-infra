@@ -74,8 +74,8 @@ exclude = [".git", ".venv", "__pycache__"]
 # F/E (pyflakes/pycodestyle) + I (import sort), B (bugbear: real-bug lints),
 # UP (pyupgrade: keep syntax current to the py312 floor).
 select = ["F", "E", "I", "B", "UP"]
-# E501 only: `ruff format` owns line length and leaves some lines long, mostly
-# prose in docstrings it will not reflow. Enabling both would contradict.
+# E501 only: `ruff format` owns line length and does not split string
+# literals, so enabling both would make the two rules contradict.
 # E402, E701 and E741 were removed after measuring that nothing needs them.
 ignore = ["E501"]
 
@@ -88,13 +88,6 @@ addopts = "-ra --import-mode=importlib --timeout=60"
 asyncio_mode = "auto"
 pythonpath = ["src", "."]
 markers = ["slow: marks tests as slow (deselect with '-m not slow')"]
-# faiss-cpu's SWIG bindings emit these three on import. They come from a
-# dependency's generated code and no change here can silence them at source.
-filterwarnings = [
-  "ignore:.*SwigPyPacked has no __module__ attribute:DeprecationWarning",
-  "ignore:.*SwigPyObject has no __module__ attribute:DeprecationWarning",
-  "ignore:.*swigvarlink has no __module__ attribute:DeprecationWarning",
-]
 
 [tool.mypy]
 # No python_version pin: each CI leg type-checks under its own interpreter, so

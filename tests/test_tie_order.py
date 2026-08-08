@@ -81,7 +81,11 @@ def test_numpy_repeats_itself_across_processes() -> None:
     )
     seen = {
         subprocess.run(
-            [sys.executable, "-c", script], capture_output=True, text=True, check=True
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
         ).stdout.strip()
         for _ in range(3)
     }
