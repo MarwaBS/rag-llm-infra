@@ -100,3 +100,32 @@ def test_the_documents_state_the_corpus_bound_the_code_uses(document: str) -> No
     """An operator who gets a 413 on an 80 KB body needs the reason written
     somewhere. The byte bound was tied to the docs and this one was not."""
     assert _document_states(document, str(DEFAULT_MAX_CORPUS_DOCS))
+
+
+def test_every_subprocess_call_is_bounded_by_a_timeout() -> None:
+    """An unbounded child hangs the suite or the replay with no exit path.
+
+    Every call site already passes one, so this is a floor rather than a fix:
+    the property was hand-verified, and a hand-verified property is one edit
+    from being false. Read from the parse tree, because the call can be spelled
+    `subprocess.run`, `check_output`, `Popen` or `call`.
+    """
+    import ast
+    import subprocess as sp
+
+    listing = sp.run(
+        ["git", "ls-files", "-z", "*.py"],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        timeout=30,
+    )
+    spawns = {"subprocess.run", "subprocess.check_output", "subprocess.Popen"}
+    unbounded = []
+    for name in [n for n in listing.stdout.split("\0") if n]:
+        tree = ast.parse((ROOT / name).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and ast.unparse(node.func) in spawns:
+                if not any(word.arg == "timeout" for word in node.keywords):
+                    unbounded.append(f"{name}:{node.lineno}")
+    assert not unbounded, unbounded
