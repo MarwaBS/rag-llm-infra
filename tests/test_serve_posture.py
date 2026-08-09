@@ -112,5 +112,5 @@ def test_the_probe_reports_configuration_when_it_actually_happens(body: str) -> 
 
 def test_the_json_formatter_forwards_caller_supplied_fields_verbatim() -> None:
     record = logging.LogRecord("t", logging.INFO, "p", 1, "m", None, None)
-    record.api_key = "sk-example"  # type: ignore[attr-defined]
+    record.api_key = "sk-example"
     assert "sk-example" in log_config._JsonFormatter().format(record)
