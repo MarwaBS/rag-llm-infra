@@ -659,10 +659,10 @@
     },
     {
       "id": "M85",
-      "why": "the security policy supports a line that was never published, so the shipped one reads as unsupported",
+      "why": "the security policy drops the line that is published, so the release people install reads as unsupported",
       "file": "SECURITY.md",
-      "find": "| 0.1.x   | yes       |",
-      "replace": "| 0.2.x   | yes       |",
+      "find": "| 0.2.x   | yes       |",
+      "replace": "| 0.2.x   | no        |",
       "gates": ["pytest tests/test_version.py"]
     },
     {
