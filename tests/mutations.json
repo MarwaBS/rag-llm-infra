@@ -701,8 +701,8 @@
       "id": "M90",
       "why": "an action goes back to a floating tag, which a publisher can repoint at other code",
       "file": ".github/workflows/ci.yml",
-      "find": "      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7",
-      "replace": "      - uses: actions/setup-python@v7",
+      "find": "uses: actions/setup-python@",
+      "replace": "uses: actions/setup-python@v7 # was ",
       "gates": ["pytest tests/test_workflows.py"]
     },
     {
