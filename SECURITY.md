@@ -2,15 +2,18 @@
 
 ## Supported versions
 
-The latest minor release line receives fixes. 0.2.0 is not published yet, so
-0.1.x is still what `pip install` resolves to and still receives them. It drops
-to unsupported when 0.2.0 ships.
+The latest minor release line receives fixes. 0.2.0 is published, so `pip
+install` resolves to it and 0.1.x is unsupported.
 
 | Version | Supported |
 |---------|-----------|
 | 0.2.x   | yes       |
-| 0.1.x   | yes       |
+| 0.1.x   | no        |
 | < 0.1   | no        |
+
+Anyone running `rag_llm_infra.serve` from 0.1.x should upgrade rather than pin.
+That module gained its credential in 0.2.0; in 0.1.x `/index` and `/query`
+answer without one, and `/index` replaces the whole corpus.
 
 ## Reporting a vulnerability
 
