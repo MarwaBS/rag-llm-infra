@@ -86,7 +86,7 @@ def configure_tracing(service_name: str | None = None) -> None:
             )
             exporter = ConsoleSpanExporter()
         except Exception as exc:
-            # Covers the import and the constructor: an unparseable endpoint
+            # Covers the import and the constructor: an unparsable endpoint
             # raises here too, so the reason is logged rather than guessed at.
             logger.warning(
                 "OTLP exporter unavailable (%s); falling back to ConsoleSpanExporter.",
