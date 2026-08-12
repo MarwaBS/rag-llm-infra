@@ -147,7 +147,7 @@ def test_a_content_length_that_is_not_a_byte_count_is_refused(
     response = authed.post(
         "/index",
         content=body,
-        headers={"content-type": "application/json", "content-length": declared},
+        headers={b"content-type": b"application/json", b"content-length": declared},
     )
     assert response.status_code == 400, response.text
 
@@ -162,7 +162,7 @@ def test_no_declared_length_can_admit_a_body_over_the_bound(
     response = authed.post(
         "/index",
         content=oversized,
-        headers={"content-type": "application/json", "content-length": declared},
+        headers={b"content-type": b"application/json", b"content-length": declared},
     )
     assert response.status_code != 201, response.status_code
 
@@ -209,7 +209,7 @@ def test_a_non_ascii_key_is_rejected_not_a_server_error(
     Sent as bytes because that is what a socket carries; httpx will not encode a
     non-ASCII str into a header at all, which is why a str probe misses this."""
     response = client.post(
-        "/index", json={"documents": ["d"]}, headers={"X-API-Key": supplied}
+        "/index", json={"documents": ["d"]}, headers={b"X-API-Key": supplied}
     )
     assert response.status_code == 401, response.text
 
