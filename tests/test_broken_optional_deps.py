@@ -78,6 +78,62 @@ def test_the_package_still_imports_and_retrieves(target: str) -> None:
     assert done.stdout.startswith("OK "), done.stdout
 
 
+def test_the_tracing_entry_points_degrade_when_otel_is_unloadable() -> None:
+    """Importing the package was already covered; calling into tracing was not.
+    An unloadable OTel raises OSError, which `except ImportError` alone lets
+    through, so each entry point has to be driven, not just the import."""
+    probe = _BREAK.format(target="opentelemetry").replace(
+        "from rag_llm_infra import get_vector_store, get_llm",
+        "from rag_llm_infra import tracing\n"
+        "tracing.configure_tracing()\n"
+        "tracing.get_tracer()\n"
+        "assert tracing.current_trace_context() == "
+        '{"trace_id": "", "span_id": ""}\n'
+        "from rag_llm_infra import get_vector_store, get_llm",
+    )
+    # A replace whose anchor moved returns the template untouched, and the
+    # template alone prints OK: the assertions below would pass having called
+    # nothing.
+    assert "configure_tracing" in probe, "the anchor moved; this probe is empty"
+    done = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, timeout=30
+    )
+    assert done.returncode == 0, done.stderr[-800:]
+    assert done.stdout.startswith("OK "), done.stdout
+
+
+def test_a_raising_trace_lookup_does_not_cost_the_log_record(monkeypatch) -> None:
+    """`current_trace_context` now degrades instead of raising, so only a
+    direct fault reaches the handler in `log_config` that exists to keep the
+    record. Without one, narrowing that handler changes nothing observable."""
+    import io
+    import json
+    import logging
+
+    from rag_llm_infra import tracing
+    from rag_llm_infra.log_config import _JsonFormatter
+
+    def _raise() -> dict[str, str]:
+        raise OSError(126, "simulated: tracer unloadable")
+
+    monkeypatch.setattr(tracing, "current_trace_context", _raise)
+
+    buffer = io.StringIO()
+    handler = logging.StreamHandler(buffer)
+    handler.setFormatter(_JsonFormatter())
+    log = logging.getLogger("trace_fault_probe")
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+    try:
+        log.info("hello")
+    finally:
+        log.removeHandler(handler)
+
+    emitted = json.loads(buffer.getvalue().strip())
+    assert emitted["msg"] == "hello", emitted
+    assert emitted["trace_id"] == "", emitted
+
+
 def test_the_control_shows_the_breaker_really_breaks_the_import() -> None:
     """Without it the probe proves nothing: the module might just be absent."""
     probe = _BREAK.format(target="faiss").replace(

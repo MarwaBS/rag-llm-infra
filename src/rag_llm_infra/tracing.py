@@ -53,6 +53,11 @@ def configure_tracing(service_name: str | None = None) -> None:
             "Run: pip install opentelemetry-sdk opentelemetry-api"
         )
         return
+    except Exception as exc:
+        # Present but unloadable: a ctypes load inside the package raises
+        # OSError, not ImportError.
+        logger.warning("opentelemetry-sdk installed but failed to load: %s", exc)
+        return
 
     # `if service_name else` rather than `or`: identical semantics (empty
     # string falls through to the env default), but mypy 2.x infers `str | None`
@@ -80,6 +85,14 @@ def configure_tracing(service_name: str | None = None) -> None:
                 "falling back to ConsoleSpanExporter."
             )
             exporter = ConsoleSpanExporter()
+        except Exception as exc:
+            # Covers the import and the constructor: an unparsable endpoint
+            # raises here too, so the reason is logged rather than guessed at.
+            logger.warning(
+                "OTLP exporter unavailable (%s); falling back to ConsoleSpanExporter.",
+                exc,
+            )
+            exporter = ConsoleSpanExporter()
     else:
         exporter = ConsoleSpanExporter()
         logger.info(
@@ -98,7 +111,11 @@ def get_tracer(name: str = "rag-llm-service") -> Any:
         from opentelemetry import trace
 
         return trace.get_tracer(name)
-    except ImportError:
+    except Exception as exc:
+        # Missing and present-but-unloadable alike: either way there is no
+        # tracer to hand back. Logged because a healthy OTel raising here is
+        # neither of those, and returning a no-op would bury it.
+        logger.warning("no tracer available: %s", exc)
         return _NoOpTracer()
 
 
@@ -118,7 +135,7 @@ def current_trace_context() -> dict[str, str]:
                 "trace_id": format(ctx.trace_id, "032x"),
                 "span_id": format(ctx.span_id, "016x"),
             }
-    except ImportError:
+    except Exception:
         pass
     return {"trace_id": "", "span_id": ""}
 

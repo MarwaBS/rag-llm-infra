@@ -18,7 +18,6 @@ from typing import Any
 
 import numpy as np
 
-# FAISS import for cache compatibility checks
 try:
     import faiss  # noqa: F401 - imported to probe availability, never called
 

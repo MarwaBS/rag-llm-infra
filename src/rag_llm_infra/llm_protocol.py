@@ -6,9 +6,9 @@ Mirrors `vector_store.py:VectorStoreProtocol` for LLM calls. See
 
 Runtime backends:
     - OpenAIBackend  : production default
-    - AnthropicBackend : contract stub, raises NotImplementedError with
-      migration TODO. Locks the interface so a later implementer does not
-      have to redesign call sites.
+    - AnthropicBackend : contract stub, raises NotImplementedError. The
+      migration plan is in docs/decisions/006-llm-protocol-abstraction.md.
+      Locks the interface so a later implementer does not redesign call sites.
     - MockBackend    : deterministic, no network, no cost; for tests.
 
 Selection is via `get_llm(backend)` reading an `auto | openai | anthropic
@@ -176,15 +176,13 @@ class AnthropicBackend:
 
     def invoke(self, messages: list[Message], **kwargs: Any) -> str:
         raise NotImplementedError(
-            "AnthropicBackend is a contract stub. Implement per the docstring "
-            "in llm_protocol.py before use. See "
+            "AnthropicBackend is a contract stub. See "
             "docs/decisions/006-llm-protocol-abstraction.md for the full plan."
         )
 
     async def ainvoke(self, messages: list[Message], **kwargs: Any) -> str:
         raise NotImplementedError(
-            "AnthropicBackend is a contract stub. Implement per the docstring "
-            "in llm_protocol.py before use. See "
+            "AnthropicBackend is a contract stub. See "
             "docs/decisions/006-llm-protocol-abstraction.md for the full plan."
         )
 
