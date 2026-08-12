@@ -6,6 +6,8 @@ CI, not just the import-guarded fallbacks.
 """
 
 import logging
+import sys
+import types
 from unittest.mock import patch
 
 import pytest
@@ -57,11 +59,15 @@ class TestConfigureTracing:
         finally:
             tracing._CONFIGURED = original
 
-    def test_an_endpoint_takes_the_otlp_branch_not_the_console_default(self, caplog):
+    def test_an_endpoint_is_read_and_skips_the_console_default(self, caplog):
         """`_CONFIGURED is True` is set by both branches, so it cannot tell them
         apart: deleting the read of OTEL_EXPORTER_OTLP_ENDPOINT left every
         assertion here green. The console default announces itself, and that
-        line must be absent when an endpoint is set."""
+        line must be absent when an endpoint is set.
+
+        This does not reach the OTLP exporter itself: the grpc exporter ships
+        in the `otel` extra, not `dev`, so the import falls back and only the
+        endpoint read is under test."""
         import rag_llm_infra.tracing as tracing
 
         original = tracing._CONFIGURED
@@ -77,6 +83,45 @@ class TestConfigureTracing:
                 tracing.configure_tracing(service_name="test")
             assert tracing._CONFIGURED is True
             assert "ConsoleSpanExporter active" not in caplog.text, caplog.text
+        finally:
+            tracing._CONFIGURED = original
+
+    def test_an_exporter_that_fails_to_construct_falls_back(self, caplog):
+        """The grpc exporter ships in `otel`, not `dev`, so the ImportError
+        branch always wins here and the constructor branch is never reached.
+        A stub that imports and then raises is the only way in."""
+        import rag_llm_infra.tracing as tracing
+
+        path = "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
+        chain = {
+            name: types.ModuleType(name)
+            for name in (
+                "opentelemetry.exporter",
+                "opentelemetry.exporter.otlp",
+                "opentelemetry.exporter.otlp.proto",
+                "opentelemetry.exporter.otlp.proto.grpc",
+                path,
+            )
+        }
+
+        def _raise(**kwargs):
+            raise ValueError("Invalid IPv6 URL")
+
+        chain[path].OTLPSpanExporter = _raise
+
+        original = tracing._CONFIGURED
+        tracing._CONFIGURED = False
+        try:
+            with (
+                caplog.at_level(logging.WARNING, logger="rag_llm_infra.tracing"),
+                patch.dict(sys.modules, chain),
+                patch.dict(
+                    "os.environ", {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://[::1"}
+                ),
+            ):
+                tracing.configure_tracing(service_name="test")
+            assert "OTLP exporter unavailable" in caplog.text, caplog.text
+            assert "Invalid IPv6 URL" in caplog.text, caplog.text
         finally:
             tracing._CONFIGURED = original
 
