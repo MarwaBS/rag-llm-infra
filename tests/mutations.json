@@ -165,8 +165,16 @@
       "id": "M22",
       "why": "the cache key drops the namespace, so two namespaces share one vector",
       "file": "src/rag_llm_infra/evidence_index.py",
-      "find": "        raw_key = f\"{namespace}:{normalized}\"",
+      "find": "        raw_key = f\"{len(namespace)}:{namespace}:{normalized}\"",
       "replace": "        raw_key = f\"{normalized}\"",
+      "gates": ["pytest tests/test_evidence_index.py"]
+    },
+    {
+      "id": "M93",
+      "why": "the cache key loses its length prefix, so a ':' in the namespace aliases another text",
+      "file": "src/rag_llm_infra/evidence_index.py",
+      "find": "        raw_key = f\"{len(namespace)}:{namespace}:{normalized}\"",
+      "replace": "        raw_key = f\"{namespace}:{normalized}\"",
       "gates": ["pytest tests/test_evidence_index.py"]
     },
     {

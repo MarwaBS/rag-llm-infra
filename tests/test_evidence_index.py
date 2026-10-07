@@ -387,6 +387,16 @@ class TestCacheKeyIdentity:
         assert fake.total_encoded == 2
         assert eng.get_stats()["cache_size"] == 2
 
+    def test_a_colon_in_the_namespace_cannot_alias_another_text(self):
+        from rag_llm_infra.evidence_index import EmbeddingEngine
+
+        fake = _FakeEmbedder()
+        eng = EmbeddingEngine(model=fake)
+        eng.embed_batch(["c"], namespace="tenant:b")
+        eng.embed_batch(["b:c"], namespace="tenant")
+        assert fake.total_encoded == 2
+        assert eng.get_stats()["cache_size"] == 2
+
     def test_two_spellings_that_nfkc_folds_together_share_one_entry(self):
         from rag_llm_infra.evidence_index import EmbeddingEngine
 

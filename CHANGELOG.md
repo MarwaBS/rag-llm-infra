@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `EmbeddingEngine`'s cache key now length-prefixes the namespace. It joined
+  namespace and text with `:`, so namespace `tenant:b` with text `c` and
+  namespace `tenant` with text `b:c` shared one entry and the second call got
+  the first text's vector.
+
 ## [0.2.0] - 2026-08-08
 
 The suite and both eval gates have each been shown to go red, and so has the
@@ -274,6 +283,7 @@ Hardening release. Each behavioral fix carries a regression test.
   structured logging, and a FastAPI service.
 - MIT license.
 
+[Unreleased]: https://github.com/MarwaBS/rag-llm-infra/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/MarwaBS/rag-llm-infra/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/MarwaBS/rag-llm-infra/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/MarwaBS/rag-llm-infra/compare/v0.1.0...v0.1.1

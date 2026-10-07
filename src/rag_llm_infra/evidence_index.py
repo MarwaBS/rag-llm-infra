@@ -209,7 +209,9 @@ class EmbeddingEngine:
         # and "us", "a b" and "a  b" embed differently), so the key must keep
         # them distinct. Otherwise a lookup returns the wrong cached vector.
         normalized = unicodedata.normalize("NFKC", text)
-        raw_key = f"{namespace}:{normalized}"
+        # Length-prefixed, so a ':' inside the namespace cannot shift the
+        # boundary: ("tenant:b", "c") and ("tenant", "b:c") stay distinct.
+        raw_key = f"{len(namespace)}:{namespace}:{normalized}"
         return hashlib.md5(raw_key.encode(), usedforsecurity=False).hexdigest()
 
     def _check_memory_pressure(self) -> None:
