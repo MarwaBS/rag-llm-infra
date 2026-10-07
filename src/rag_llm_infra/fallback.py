@@ -24,11 +24,13 @@ Programming/contract errors (e.g. `TypeError`, `NotImplementedError`) are NOT
 retryable. They propagate, so a misconfigured chain fails loudly instead of
 silently degrading. That is also why you should not chain the `AnthropicBackend`
 stub: it raises `NotImplementedError`, which is a bug to surface, not a fallback.
+Nor `MockBackend` outside tests: its answers are canned, and `get_llm("auto")`
+refuses to fall back to it for that reason.
 
 Conforms to `LLMProtocol`, so it is a drop-in anywhere a single backend is used::
 
-    from rag_llm_infra import get_llm, FallbackLLM
-    llm = FallbackLLM([get_llm("openai"), get_llm("mock")])
+    from rag_llm_infra import FallbackLLM
+    llm = FallbackLLM([primary, secondary])  # two real LLMProtocol backends
 
 Thread safety: a single `FallbackLLM` is safe to share across threads. The only
 mutable state is `_active`, the budget-exhaustion high-water mark. Its

@@ -75,10 +75,10 @@ curl -XPOST localhost:8000/query -d '{"query":"vector search","k":1}'      -H 'c
 
 ```bash
 python -m eval.retrieval_eval      # recall@1 / MRR: retrieval mechanics over the demo embedder
-python -m eval.generation_eval     # groundedness (faithfulness) of generated answers
+python -m eval.generation_eval     # groundedness separates labelled faithful and hallucinated answers
 ```
 
-Both run in CI: a **retrieval** regression or a **faithfulness** regression fails
+Both run in CI: a **retrieval** regression or a **groundedness-metric** regression fails
 the build and cannot merge. No floor is edited where it is used: every one is
 computed by `scripts/derive_eval_floors.py` into `eval/eval_floors.json`, which
 records the rule beside the measurement it came from, and a test requires

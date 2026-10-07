@@ -235,7 +235,6 @@ class EmbeddingEngine:
                 self._max_cache_size = reduction
             else:
                 self._max_cache_size = self._configured_cache_size
-        # Memory-pressure cache trim is best-effort; never break ingest on failure.
         except Exception as exc:
             # Trimming is best-effort and must not break ingest, but a silent
             # pass hides a psutil that is failing on every call.

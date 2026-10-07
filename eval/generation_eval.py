@@ -1,4 +1,4 @@
-"""Generation-quality (faithfulness) gate.
+"""Groundedness-metric gate over labelled answers.
 
 Runs the retrieval step, then checks that the groundedness metric DISCRIMINATES
 answers labelled faithful (paraphrases of the evidence) from answers labelled
